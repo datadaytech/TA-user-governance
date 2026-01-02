@@ -1,0 +1,307 @@
+<dashboard version="1.1" theme="dark">
+  <label>Governance Settings</label>
+  <description>Configure thresholds and settings for scheduled search governance</description>
+
+  <row>
+    <panel>
+      <title>Suspicious Search Thresholds</title>
+      <html>
+        <div class="settings-info">
+          <p>Configure the thresholds used to identify suspicious scheduled searches. Changes take effect immediately.</p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Current Settings Display -->
+  <row>
+    <panel>
+      <title>Current Configuration</title>
+      <table>
+        <search>
+          <query>`get_governance_settings`
+| table setting_name, setting_value, description
+| rename setting_name as "Setting", setting_value as "Value", description as "Description"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Update Settings Form -->
+  <row>
+    <panel>
+      <title>Update Runtime Ratio Threshold</title>
+      <html>
+        <p>Maximum allowed runtime as a percentage of the schedule interval. Searches exceeding this ratio will be flagged as suspicious.</p>
+        <p><strong>Default:</strong> 10%</p>
+      </html>
+      <input type="text" token="new_runtime_ratio" searchWhenChanged="false">
+        <label>New Threshold (%)</label>
+        <default>10</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('runtime_ratio_threshold', '$new_runtime_ratio$', 'Maximum runtime as percentage of schedule interval')">Update Runtime Ratio Threshold</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>Update High Frequency Threshold</title>
+      <html>
+        <p>Minimum interval (in seconds) between scheduled runs. Searches running more frequently than this will be flagged.</p>
+        <p><strong>Default:</strong> 900 seconds (15 minutes)</p>
+      </html>
+      <input type="dropdown" token="new_frequency_threshold" searchWhenChanged="false">
+        <label>Minimum Interval</label>
+        <choice value="60">1 Minute (60s)</choice>
+        <choice value="300">5 Minutes (300s)</choice>
+        <choice value="600">10 Minutes (600s)</choice>
+        <choice value="900">15 Minutes (900s)</choice>
+        <choice value="1800">30 Minutes (1800s)</choice>
+        <choice value="3600">1 Hour (3600s)</choice>
+        <default>900</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('high_frequency_threshold', '$new_frequency_threshold$', 'Minimum seconds between runs to flag as high frequency')">Update Frequency Threshold</button>
+        </form>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Update Long Runtime Threshold</title>
+      <html>
+        <p>Maximum average runtime (in seconds) before a search is flagged as long-running.</p>
+        <p><strong>Default:</strong> 300 seconds (5 minutes)</p>
+      </html>
+      <input type="dropdown" token="new_runtime_threshold" searchWhenChanged="false">
+        <label>Maximum Runtime</label>
+        <choice value="60">1 Minute (60s)</choice>
+        <choice value="120">2 Minutes (120s)</choice>
+        <choice value="180">3 Minutes (180s)</choice>
+        <choice value="300">5 Minutes (300s)</choice>
+        <choice value="600">10 Minutes (600s)</choice>
+        <choice value="900">15 Minutes (900s)</choice>
+        <default>300</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('long_runtime_threshold', '$new_runtime_threshold$', 'Runtime in seconds to flag as long running')">Update Runtime Threshold</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>Update Remediation Period</title>
+      <html>
+        <p>Number of days users have to remediate flagged searches before they are automatically disabled.</p>
+        <p><strong>Default:</strong> 7 days</p>
+      </html>
+      <input type="dropdown" token="new_remediation_days" searchWhenChanged="false">
+        <label>Remediation Period</label>
+        <choice value="3">3 Days</choice>
+        <choice value="5">5 Days</choice>
+        <choice value="7">7 Days</choice>
+        <choice value="14">14 Days</choice>
+        <choice value="30">30 Days</choice>
+        <default>7</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('remediation_days', '$new_remediation_days$', 'Days allowed for remediation before auto-disable')">Update Remediation Period</button>
+        </form>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Email Configuration -->
+  <row>
+    <panel>
+      <title>Email Configuration</title>
+      <html>
+        <div class="email-config-info">
+          <h4>Email Domain Setting</h4>
+          <p>The email domain used when sending notifications to search owners. Owner usernames are appended with this domain.</p>
+          <p><strong>Current:</strong> @company.com</p>
+          <p><em>To change this, edit the JavaScript file or use the input below.</em></p>
+        </div>
+      </html>
+      <input type="text" token="email_domain" searchWhenChanged="false">
+        <label>Email Domain</label>
+        <default>company.com</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('email_domain', '$email_domain$', 'Email domain for owner notifications')">Update Email Domain</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>Admin Notification Email</title>
+      <html>
+        <p>Email address for admin team notifications (weekly reports, alerts).</p>
+        <p><strong>Default:</strong> splunk-admins@company.com</p>
+        <p><em>Note: Update savedsearches.conf to change actual alert recipients.</em></p>
+      </html>
+      <input type="text" token="admin_email" searchWhenChanged="false">
+        <label>Admin Email</label>
+        <default>splunk-admins@company.com</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('admin_email', '$admin_email$', 'Admin team notification email')">Update Admin Email</button>
+        </form>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Wasteful Command Patterns -->
+  <row>
+    <panel>
+      <title>Wasteful SPL Command Detection</title>
+      <html>
+        <div class="wasteful-info">
+          <h4>Currently Detected Patterns</h4>
+          <ul>
+            <li><code>index=*</code> - Searches scanning all indexes</li>
+            <li><code>| join</code> - Expensive join operations</li>
+            <li><code>| append</code> - Append operations without limits</li>
+            <li><code>| transaction</code> - Transaction commands</li>
+            <li><code>earliest=-30d</code> or longer - Extended time ranges</li>
+          </ul>
+          <p><em>To customize these patterns, edit the macros.conf file.</em></p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Scheduled Search Status -->
+  <row>
+    <panel>
+      <title>Governance Scheduled Searches Status</title>
+      <table>
+        <search>
+          <query>| rest /servicesNS/-/TA-user-governance/saved/searches splunk_server=local
+| search is_scheduled=1
+| table title, cron_schedule, disabled, next_scheduled_time
+| rename title as "Search Name", cron_schedule as "Schedule", disabled as "Disabled", next_scheduled_time as "Next Run"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Disabled">
+          <colorPalette type="map">{"0":#53A051,"1":#DC4E41}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- KV Store Statistics -->
+  <row>
+    <panel>
+      <title>KV Store Statistics</title>
+      <table>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| stats count as "Total Flagged" count(eval(status="pending")) as "Pending" count(eval(status="notified")) as "Awaiting Remediation" count(eval(status="disabled")) as "Disabled" count(eval(status="resolved")) as "Resolved"
+| transpose
+| rename column as "Status", "row 1" as "Count"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>1m</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Audit Log Statistics</title>
+      <table>
+        <search>
+          <query>| inputlookup governance_audit_log_lookup
+| stats count as "Total Actions" count(eval(action="flagged")) as "Flagged" count(eval(action="disabled")) as "Disabled" count(eval(action="unflagged")) as "Unflagged" count(eval(action="extended")) as "Extended" earliest(timestamp) as first_action latest(timestamp) as last_action
+| eval first_action = strftime(first_action, "%Y-%m-%d")
+| eval last_action = strftime(last_action, "%Y-%m-%d")
+| transpose
+| rename column as "Metric", "row 1" as "Value"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>1m</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- JavaScript for settings updates -->
+  <row>
+    <html>
+      <script>
+        function updateSetting(settingName, settingValue, description) {
+          if (!settingValue || settingValue.indexOf('$') === 0) {
+            alert('Please enter a valid value');
+            return;
+          }
+
+          var searchQuery = '| inputlookup governance_settings_lookup ' +
+            '| append [| makeresults | eval setting_name="' + settingName + '", setting_value="' + settingValue + '", description="' + description + '" | fields - _time] ' +
+            '| dedup setting_name ' +
+            '| outputlookup governance_settings_lookup';
+
+          // Use Splunk's search manager to run the update
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
+            var updateSearch = new SearchManager({
+              id: 'update_setting_' + Date.now(),
+              search: searchQuery,
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
+            });
+
+            updateSearch.on('search:done', function() {
+              alert('Setting "' + settingName + '" updated to "' + settingValue + '"');
+              location.reload();
+            });
+
+            updateSearch.on('search:error', function(err) {
+              alert('Error updating setting: ' + err);
+            });
+          });
+        }
+      </script>
+      <style>
+        .settings-form {
+          margin-top: 10px;
+        }
+        .settings-info, .email-config-info, .wasteful-info {
+          background: rgba(0,0,0,0.2);
+          padding: 15px;
+          border-radius: 4px;
+          margin-bottom: 15px;
+        }
+        .wasteful-info code {
+          background: rgba(0,109,156,0.3);
+          padding: 2px 6px;
+          border-radius: 3px;
+        }
+        .wasteful-info ul {
+          margin-left: 20px;
+        }
+        .wasteful-info li {
+          margin-bottom: 8px;
+        }
+      </style>
+    </html>
+  </row>
+
+</dashboard>

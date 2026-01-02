@@ -1,0 +1,7 @@
+setting_name,setting_value,description
+email_domain,example.com,Email domain for user notifications (e.g. example.com)
+runtime_ratio_threshold,10,Maximum runtime as percentage of schedule interval
+high_frequency_threshold,900,Minimum seconds between runs to flag as high frequency
+long_runtime_threshold,300,Runtime in seconds to flag as long running
+remediation_days,7,Days allowed for remediation before auto-disable
+admin_email,splunk-admins@example.com,Admin team notification email

@@ -1,0 +1,24 @@
+# Application-level permissions
+[]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+export = system
+
+[views]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+export = none
+
+[collections]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+export = none
+
+[transforms]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+export = system
+
+[macros]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+export = system
+
+[savedsearches]
+access = read : [ admin, sc_admin ], write : [ admin, sc_admin ]
+export = none

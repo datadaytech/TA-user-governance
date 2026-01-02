@@ -1,0 +1,525 @@
+<dashboard version="1.1" theme="dark" stylesheet="governance.css">
+  <label>Scheduled Search Governance</label>
+  <description>Monitor, flag, and enforce policies on scheduled searches | Demo Preview</description>
+
+  <!-- Custom CSS for enhanced styling -->
+  <row>
+    <html>
+      <style>
+        /* Modern Dashboard Styling */
+        .dashboard-body {
+          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
+        }
+
+        .dashboard-header {
+          background: rgba(0,0,0,0.3) !important;
+          border-bottom: 2px solid #00d4ff !important;
+        }
+
+        .dashboard-header h1 {
+          color: #00d4ff !important;
+          text-shadow: 0 0 20px rgba(0,212,255,0.5);
+        }
+
+        .panel-head {
+          background: linear-gradient(90deg, rgba(0,212,255,0.1) 0%, transparent 100%) !important;
+          border-left: 3px solid #00d4ff !important;
+        }
+
+        .panel-title {
+          color: #ffffff !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.5px;
+        }
+
+        /* Glowing Single Value Panels */
+        .single-value {
+          background: rgba(0,0,0,0.3) !important;
+          border-radius: 12px !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          transition: all 0.3s ease !important;
+        }
+
+        .single-value:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(0,212,255,0.2) !important;
+        }
+
+        .single-result {
+          font-size: 48px !important;
+          font-weight: 700 !important;
+          text-shadow: 0 0 30px currentColor;
+        }
+
+        /* Status Cards */
+        .metric-card {
+          background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+          border-radius: 16px;
+          padding: 24px;
+          border: 1px solid rgba(255,255,255,0.1);
+          backdrop-filter: blur(10px);
+          transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+        }
+
+        .metric-value {
+          font-size: 42px;
+          font-weight: 800;
+          margin-bottom: 8px;
+        }
+
+        .metric-label {
+          font-size: 14px;
+          color: rgba(255,255,255,0.7);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .metric-trend {
+          font-size: 12px;
+          margin-top: 8px;
+        }
+
+        .trend-up { color: #dc4e41; }
+        .trend-down { color: #53a051; }
+
+        /* Table Styling */
+        .table-chrome {
+          background: rgba(0,0,0,0.2) !important;
+          border-radius: 12px !important;
+          overflow: hidden;
+        }
+
+        .table-chrome th {
+          background: rgba(0,212,255,0.15) !important;
+          color: #00d4ff !important;
+          font-weight: 600 !important;
+          text-transform: uppercase !important;
+          font-size: 11px !important;
+          letter-spacing: 1px !important;
+        }
+
+        .table-chrome tbody tr {
+          border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .table-chrome tbody tr:hover {
+          background: rgba(0,212,255,0.1) !important;
+          cursor: pointer;
+        }
+
+        /* Alert Panel */
+        .alert-panel {
+          background: linear-gradient(135deg, rgba(220,78,65,0.15) 0%, rgba(220,78,65,0.05) 100%);
+          border: 1px solid rgba(220,78,65,0.3);
+          border-radius: 12px;
+          padding: 20px;
+        }
+
+        .alert-header {
+          display: flex;
+          align-items: center;
+          margin-bottom: 16px;
+        }
+
+        .alert-icon {
+          width: 40px;
+          height: 40px;
+          background: #dc4e41;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 12px;
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(220,78,65,0.4); }
+          50% { box-shadow: 0 0 0 15px rgba(220,78,65,0); }
+        }
+
+        /* Status Badges */
+        .status-badge {
+          display: inline-block;
+          padding: 4px 12px;
+          border-radius: 20px;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .status-critical { background: rgba(220,78,65,0.2); color: #ff6b6b; border: 1px solid rgba(220,78,65,0.4); }
+        .status-warning { background: rgba(248,190,52,0.2); color: #ffd93d; border: 1px solid rgba(248,190,52,0.4); }
+        .status-ok { background: rgba(83,160,81,0.2); color: #6bcb77; border: 1px solid rgba(83,160,81,0.4); }
+        .status-info { background: rgba(0,109,156,0.2); color: #4d96ff; border: 1px solid rgba(0,109,156,0.4); }
+
+        /* Action Buttons */
+        .action-btn {
+          background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+          border: none;
+          color: white;
+          padding: 10px 24px;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          margin-right: 10px;
+          text-transform: uppercase;
+          font-size: 12px;
+          letter-spacing: 1px;
+        }
+
+        .action-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(0,212,255,0.4);
+        }
+
+        .action-btn-danger {
+          background: linear-gradient(135deg, #dc4e41 0%, #b33a30 100%);
+        }
+
+        .action-btn-danger:hover {
+          box-shadow: 0 8px 25px rgba(220,78,65,0.4);
+        }
+
+        /* Charts */
+        .chart-container {
+          background: rgba(0,0,0,0.2);
+          border-radius: 12px;
+          padding: 20px;
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Progress bars */
+        .progress-bar {
+          height: 8px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+
+        .progress-fill {
+          height: 100%;
+          border-radius: 4px;
+          transition: width 1s ease;
+        }
+
+        .progress-critical { background: linear-gradient(90deg, #dc4e41, #ff6b6b); }
+        .progress-warning { background: linear-gradient(90deg, #f8be34, #ffd93d); }
+        .progress-ok { background: linear-gradient(90deg, #53a051, #6bcb77); }
+
+        /* Glow effects */
+        .glow-blue { text-shadow: 0 0 20px rgba(0,212,255,0.8); color: #00d4ff; }
+        .glow-red { text-shadow: 0 0 20px rgba(220,78,65,0.8); color: #dc4e41; }
+        .glow-yellow { text-shadow: 0 0 20px rgba(248,190,52,0.8); color: #f8be34; }
+        .glow-green { text-shadow: 0 0 20px rgba(83,160,81,0.8); color: #53a051; }
+      </style>
+    </html>
+  </row>
+
+  <!-- Hero Metrics Row -->
+  <row>
+    <panel>
+      <html>
+        <div style="display: flex; justify-content: space-between; gap: 20px; padding: 10px;">
+
+          <div class="metric-card" style="flex: 1; text-align: center;">
+            <div class="metric-value glow-blue">247</div>
+            <div class="metric-label">Total Scheduled Searches</div>
+            <div class="metric-trend">
+              <span style="color: rgba(255,255,255,0.5);">+12 this week</span>
+            </div>
+          </div>
+
+          <div class="metric-card" style="flex: 1; text-align: center;">
+            <div class="metric-value glow-red">18</div>
+            <div class="metric-label">Suspicious Searches</div>
+            <div class="metric-trend trend-up">
+              ▲ 3 new detected
+            </div>
+          </div>
+
+          <div class="metric-card" style="flex: 1; text-align: center;">
+            <div class="metric-value glow-yellow">7</div>
+            <div class="metric-label">Currently Flagged</div>
+            <div class="metric-trend">
+              <span style="color: rgba(255,255,255,0.5);">2 pending notification</span>
+            </div>
+          </div>
+
+          <div class="metric-card" style="flex: 1; text-align: center;">
+            <div class="metric-value glow-yellow">4</div>
+            <div class="metric-label">Pending Remediation</div>
+            <div class="metric-trend trend-up">
+              ▲ 1 deadline approaching
+            </div>
+          </div>
+
+          <div class="metric-card" style="flex: 1; text-align: center;">
+            <div class="metric-value glow-green">3</div>
+            <div class="metric-label">Auto-Disabled (30d)</div>
+            <div class="metric-trend trend-down">
+              ▼ 40% vs last month
+            </div>
+          </div>
+
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Alert Banner -->
+  <row>
+    <panel>
+      <html>
+        <div class="alert-panel">
+          <div class="alert-header">
+            <div class="alert-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+              </svg>
+            </div>
+            <div>
+              <div style="font-size: 16px; font-weight: 600; color: #ff6b6b;">Action Required</div>
+              <div style="font-size: 13px; color: rgba(255,255,255,0.7);">18 scheduled searches require immediate review</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="action-btn">Review Suspicious Searches</button>
+            <button class="action-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">View All Flagged</button>
+          </div>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Suspicious Searches Table -->
+  <row>
+    <panel>
+      <title>Suspicious Scheduled Searches - Requires Review</title>
+      <table>
+        <search>
+          <query>| makeresults count=8
+| streamstats count as id
+| eval data = case(
+    id=1, "Security_Alert_Monitor|admin|security_app|*/5 * * * *|Every 5 Min|4m 32s|90.7|Runtime exceeds 90.7% of schedule interval; High frequency|No",
+    id=2, "Index_Health_Check|svc_splunk|_internal|*/1 * * * *|Every Minute|52s|86.7|Runtime exceeds 86.7% of schedule interval; High frequency|Yes",
+    id=3, "User_Activity_Report|jsmith|search|*/15 * * * *|Every 15 Min|2m 18s|15.3|Runtime exceeds 15.3% of schedule interval|No",
+    id=4, "Log_Aggregation_Daily|admin|main_app|0 */2 * * *|Every 2 Hours|18m 45s|15.6|Long average runtime (18.8 min)|Yes",
+    id=5, "Compliance_Scan|compliance_svc|compliance|*/10 * * * *|Every 10 Min|1m 42s|17.0|Runtime exceeds 17.0% of schedule interval|No",
+    id=6, "Network_Traffic_Analysis|netops|network|*/5 * * * *|Every 5 Min|3m 55s|78.3|Runtime exceeds 78.3% of schedule interval; Contains index=*|No",
+    id=7, "Error_Rate_Monitor|devops|monitoring|*/1 * * * *|Every Minute|48s|80.0|Runtime exceeds 80.0% of schedule interval; High frequency|No",
+    id=8, "Data_Quality_Check|etl_user|data_quality|*/30 * * * *|Every 30 Min|8m 12s|27.3|Runtime exceeds 27.3% of schedule interval; Contains | join|No"
+)
+| eval parts = split(data, "|")
+| eval search_name = mvindex(parts, 0)
+| eval owner = mvindex(parts, 1)
+| eval app = mvindex(parts, 2)
+| eval schedule = mvindex(parts, 3)
+| eval frequency = mvindex(parts, 4)
+| eval avg_runtime = mvindex(parts, 5)
+| eval runtime_ratio = mvindex(parts, 6)
+| eval reason = mvindex(parts, 7)
+| eval flagged = mvindex(parts, 8)
+| table search_name, owner, app, schedule, frequency, avg_runtime, runtime_ratio, reason, flagged
+| rename search_name as "Search Name", owner as "Owner", app as "App", schedule as "Schedule", frequency as "Frequency", avg_runtime as "Avg Runtime", runtime_ratio as "Runtime Ratio %", reason as "Reason", flagged as "Flagged"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">row</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Runtime Ratio %">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midValue="15" maxValue="100"></scale>
+        </format>
+        <format type="color" field="Flagged">
+          <colorPalette type="map">{"Yes":#DC4E41,"No":#53A051}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <div style="padding: 15px; display: flex; gap: 10px;">
+          <button class="action-btn">Flag Selected Search</button>
+          <button class="action-btn" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">Email Owner</button>
+          <button class="action-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">Bulk Flag All</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Two Column Layout -->
+  <row>
+    <!-- Runtime Distribution Chart -->
+    <panel>
+      <title>Runtime Distribution by App</title>
+      <chart>
+        <search>
+          <query>| makeresults count=6
+| streamstats count as id
+| eval app = case(id=1, "security_app", id=2, "search", id=3, "main_app", id=4, "compliance", id=5, "network", id=6, "monitoring")
+| eval avg_runtime = case(id=1, 272, id=2, 138, id=3, 1125, id=4, 102, id=5, 235, id=6, 48)
+| eval search_count = case(id=1, 45, id=2, 82, id=3, 23, id=4, 18, id=5, 31, id=6, 48)
+| table app, avg_runtime, search_count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.fieldColors">{"avg_runtime": 0x00d4ff, "search_count": 0x6366f1}</option>
+        <option name="charting.axisTitleX.text">Application</option>
+        <option name="charting.axisTitleY.text">Average Runtime (seconds)</option>
+      </chart>
+    </panel>
+
+    <!-- Flagged Searches Management -->
+    <panel>
+      <title>Flagged Searches - Pending Remediation</title>
+      <table>
+        <search>
+          <query>| makeresults count=5
+| streamstats count as id
+| eval data = case(
+    id=1, "Index_Health_Check|svc_splunk|admin|2024-12-28|2025-01-04|6.2|Awaiting Remediation",
+    id=2, "Log_Aggregation_Daily|admin|jdoe|2024-12-25|2025-01-01|0.5|Awaiting Remediation",
+    id=3, "Backup_Verification|backup_svc|admin|2024-12-30|2025-01-06|5.8|Pending Notification",
+    id=4, "License_Usage_Report|license_mgr|msmith|2024-12-27|2025-01-03|2.1|Awaiting Remediation",
+    id=5, "Cache_Cleanup|system|admin|2024-12-20|2024-12-27|-1.2|Disabled"
+)
+| eval parts = split(data, "|")
+| eval search_name = mvindex(parts, 0)
+| eval owner = mvindex(parts, 1)
+| eval flagged_by = mvindex(parts, 2)
+| eval flagged_date = mvindex(parts, 3)
+| eval deadline = mvindex(parts, 4)
+| eval days_remaining = mvindex(parts, 5)
+| eval status = mvindex(parts, 6)
+| table search_name, owner, flagged_by, flagged_date, deadline, days_remaining, status
+| rename search_name as "Search Name", owner as "Owner", flagged_by as "Flagged By", flagged_date as "Flagged Date", deadline as "Deadline", days_remaining as "Days Left", status as "Status"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="drilldown">row</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Days Left">
+          <colorPalette type="minMidMax" maxColor="#53A051" midColor="#F8BE34" minColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax" minValue="-2" midValue="3" maxValue="7"></scale>
+        </format>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"Pending Notification":#F8BE34,"Awaiting Remediation":#F1813F,"Disabled":#DC4E41}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <div style="padding: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="action-btn">Send Reminder</button>
+          <button class="action-btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">Extend Deadline</button>
+          <button class="action-btn-danger action-btn">Disable Now</button>
+          <button class="action-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">Mark Resolved</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Governance Timeline -->
+  <row>
+    <panel>
+      <title>Recent Governance Activity</title>
+      <table>
+        <search>
+          <query>| makeresults count=10
+| streamstats count as id
+| eval data = case(
+    id=1, "2025-01-01 09:45:23|flagged|Security_Alert_Monitor|admin|High runtime ratio detected (90.7%)",
+    id=2, "2025-01-01 09:30:15|notification_sent|Index_Health_Check|system|Initial notification sent to svc_splunk",
+    id=3, "2025-01-01 08:00:00|disabled|Cache_Cleanup|system|Auto-disabled after deadline exceeded",
+    id=4, "2024-12-31 16:22:41|extended|License_Usage_Report|msmith|Deadline extended by 7 days",
+    id=5, "2024-12-31 14:15:33|flagged|Log_Aggregation_Daily|jdoe|Long runtime flagged (18m 45s avg)",
+    id=6, "2024-12-31 11:45:00|reminder_sent|Backup_Verification|system|Reminder sent - 2 days remaining",
+    id=7, "2024-12-30 17:30:22|unflagged|Report_Generator|admin|Issue resolved by owner",
+    id=8, "2024-12-30 15:00:00|notification_sent|Backup_Verification|system|Initial notification sent",
+    id=9, "2024-12-30 10:12:45|flagged|Backup_Verification|admin|Contains wasteful join command",
+    id=10, "2024-12-29 09:00:00|disabled|Old_Metrics_Collector|system|Auto-disabled after 7 days"
+)
+| eval parts = split(data, "|")
+| eval time = mvindex(parts, 0)
+| eval action = mvindex(parts, 1)
+| eval search_name = mvindex(parts, 2)
+| eval performed_by = mvindex(parts, 3)
+| eval details = mvindex(parts, 4)
+| table time, action, search_name, performed_by, details
+| rename time as "Time", action as "Action", search_name as "Search Name", performed_by as "By", details as "Details"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Action">
+          <colorPalette type="map">{"flagged":#F8BE34,"notification_sent":#00d4ff,"disabled":#DC4E41,"unflagged":#53A051,"extended":#6366f1,"reminder_sent":#F1813F}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Footer Stats -->
+  <row>
+    <panel>
+      <html>
+        <div style="display: flex; justify-content: space-around; padding: 30px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+
+          <div style="text-align: center;">
+            <div style="font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">COMPLIANCE RATE</div>
+            <div style="font-size: 36px; font-weight: 700; color: #53a051;">94.2%</div>
+            <div style="width: 120px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-top: 8px;">
+              <div style="width: 94%; height: 100%; background: linear-gradient(90deg, #53a051, #6bcb77); border-radius: 3px;"></div>
+            </div>
+          </div>
+
+          <div style="text-align: center;">
+            <div style="font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">AVG REMEDIATION TIME</div>
+            <div style="font-size: 36px; font-weight: 700; color: #00d4ff;">3.2 days</div>
+            <div style="font-size: 12px; color: #53a051; margin-top: 8px;">▼ 18% improvement</div>
+          </div>
+
+          <div style="text-align: center;">
+            <div style="font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">SEARCHES OPTIMIZED</div>
+            <div style="font-size: 36px; font-weight: 700; color: #6366f1;">127</div>
+            <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 8px;">Last 30 days</div>
+          </div>
+
+          <div style="text-align: center;">
+            <div style="font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">RESOURCE SAVINGS</div>
+            <div style="font-size: 36px; font-weight: 700; color: #10b981;">42%</div>
+            <div style="font-size: 12px; color: #53a051; margin-top: 8px;">CPU reduction achieved</div>
+          </div>
+
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Branding Footer -->
+  <row>
+    <panel>
+      <html>
+        <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.4); font-size: 12px;">
+          <div style="margin-bottom: 8px;">
+            <span style="color: #00d4ff; font-weight: 600;">TA-user-governance</span> v1.0.0
+          </div>
+          <div>Scheduled Search Governance &amp; Compliance Management</div>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+</dashboard>

@@ -1,0 +1,15 @@
+cron_pattern,frequency_seconds,frequency_label
+"*/1 * * * *",60,Every Minute
+"*/2 * * * *",120,Every 2 Minutes
+"*/5 * * * *",300,Every 5 Minutes
+"*/10 * * * *",600,Every 10 Minutes
+"*/15 * * * *",900,Every 15 Minutes
+"*/30 * * * *",1800,Every 30 Minutes
+"0 * * * *",3600,Hourly
+"0 */2 * * *",7200,Every 2 Hours
+"0 */4 * * *",14400,Every 4 Hours
+"0 */6 * * *",21600,Every 6 Hours
+"0 */12 * * *",43200,Every 12 Hours
+"0 0 * * *",86400,Daily
+"0 0 * * 0",604800,Weekly
+"0 0 1 * *",2592000,Monthly

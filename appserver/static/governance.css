@@ -1,0 +1,614 @@
+/*
+ * Governance Dashboard Styles
+ */
+
+/* Action buttons container */
+.action-buttons {
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.action-buttons button {
+    margin-right: 10px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.action-buttons .btn {
+    background-color: #3c444d;
+    border: 1px solid #5c6773;
+    color: #ffffff;
+}
+
+.action-buttons .btn:hover {
+    background-color: #4c545d;
+    border-color: #7c8793;
+}
+
+.action-buttons .btn-primary {
+    background-color: #006d9c;
+    border-color: #006d9c;
+    color: #ffffff;
+}
+
+.action-buttons .btn-primary:hover {
+    background-color: #0088c2;
+    border-color: #0088c2;
+}
+
+.action-buttons .btn-warning {
+    background-color: #dc4e41;
+    border-color: #dc4e41;
+    color: #ffffff;
+}
+
+.action-buttons .btn-warning:hover {
+    background-color: #e65f53;
+    border-color: #e65f53;
+}
+
+/* Panel styling */
+.dashboard-panel {
+    margin-bottom: 20px;
+}
+
+.panel-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* Table row hover effect */
+.table-chrome tbody tr:hover {
+    background-color: rgba(0, 109, 156, 0.2) !important;
+    cursor: pointer;
+}
+
+/* Single value panel styling */
+.single-value {
+    padding: 20px;
+}
+
+/* Suspicious searches alert styling */
+#suspicious_searches_table {
+    border-left: 4px solid #f8be34;
+}
+
+/* Flagged searches table styling */
+#flagged_searches_table {
+    border-left: 4px solid #dc4e41;
+}
+
+/* Status badges */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-ok {
+    background-color: rgba(83, 160, 81, 0.3);
+    color: #53a051;
+}
+
+.status-suspicious {
+    background-color: rgba(248, 190, 52, 0.3);
+    color: #f8be34;
+}
+
+.status-flagged {
+    background-color: rgba(241, 129, 63, 0.3);
+    color: #f1813f;
+}
+
+.status-disabled {
+    background-color: rgba(220, 78, 65, 0.3);
+    color: #dc4e41;
+}
+
+/* Tooltip styling */
+.tooltip-info {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+}
+
+.tooltip-info::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #1c1c21;
+    color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+.tooltip-info:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Filter section styling */
+.input-dropdown,
+.input-text {
+    margin-right: 15px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .action-buttons button {
+        margin-bottom: 10px;
+    }
+}
+
+/* Custom scrollbar for tables */
+.table-chrome tbody {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Highlight selected row */
+.table-chrome tbody tr.selected {
+    background-color: rgba(0, 109, 156, 0.4) !important;
+}
+
+/* Header row count badge */
+.row-count-badge {
+    background-color: #006d9c;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    margin-left: 10px;
+}
+
+/* ============================================
+   Cron Schedule Modal Styles
+   ============================================ */
+
+/* Clickable cron badge in tables */
+.cron-clickable {
+    cursor: pointer;
+    padding: 4px 10px;
+    background: rgba(0, 109, 156, 0.2);
+    border: 1px solid rgba(0, 109, 156, 0.4);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #00d4ff;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.cron-clickable:hover {
+    background: rgba(0, 109, 156, 0.4);
+    border-color: #00d4ff;
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
+}
+
+.cron-clickable::after {
+    content: ' \270E';
+    opacity: 0.6;
+    font-size: 10px;
+}
+
+/* Modal overlay */
+.cron-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.cron-modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Modal container */
+.cron-modal {
+    background: linear-gradient(145deg, #2a2a35 0%, #1c1c21 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    width: 90%;
+    max-width: 680px;
+    max-height: 90vh;
+    overflow: hidden;
+    transform: scale(0.9) translateY(20px);
+    transition: all 0.3s ease;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 212, 255, 0.1);
+}
+
+.cron-modal-overlay.active .cron-modal {
+    transform: scale(1) translateY(0);
+}
+
+/* Modal header */
+.cron-modal-header {
+    padding: 20px 24px;
+    background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, transparent 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cron-modal-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #00d4ff;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cron-modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cron-modal-close:hover {
+    background: rgba(220, 78, 65, 0.3);
+    color: #ff6b6b;
+}
+
+/* Modal body */
+.cron-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    max-height: calc(90vh - 160px);
+}
+
+/* Search info section */
+.cron-search-info {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cron-search-info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.cron-search-info-row:last-child {
+    margin-bottom: 0;
+}
+
+.cron-search-info-label {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+}
+
+.cron-search-info-value {
+    font-weight: 600;
+    font-size: 12px;
+    color: #ffffff;
+}
+
+/* Section titles */
+.cron-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Preset buttons grid */
+.cron-preset-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.cron-preset-btn {
+    padding: 12px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.cron-preset-btn:hover {
+    background: rgba(0, 212, 255, 0.15);
+    border-color: rgba(0, 212, 255, 0.4);
+}
+
+.cron-preset-btn.active {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: #00d4ff;
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+}
+
+.cron-preset-label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 3px;
+}
+
+.cron-preset-cron {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: monospace;
+}
+
+/* Cron input fields */
+.cron-input-section {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.cron-fields {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.cron-field {
+    text-align: center;
+}
+
+.cron-field label {
+    display: block;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.cron-field input {
+    width: 100%;
+    padding: 10px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-size: 14px;
+    font-family: monospace;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.cron-field input:focus {
+    outline: none;
+    border-color: #00d4ff;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+
+/* Cron preview section */
+.cron-preview {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+.cron-preview-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.cron-preview-value {
+    font-size: 24px;
+    font-family: monospace;
+    font-weight: 700;
+    color: #00d4ff;
+    text-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+    margin-bottom: 6px;
+    letter-spacing: 3px;
+}
+
+.cron-preview-description {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Next runs section */
+.cron-next-runs {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cron-next-runs-title {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+}
+
+.cron-next-run-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.cron-next-run-item::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    background: #00d4ff;
+    border-radius: 50%;
+}
+
+/* Modal footer */
+.cron-modal-footer {
+    padding: 16px 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.cron-modal-footer .btn {
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.cron-modal-footer .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cron-modal-footer .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.cron-modal-footer .btn-primary {
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+    color: white;
+}
+
+.cron-modal-footer .btn-primary:hover {
+    box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+}
+
+/* Toast notification */
+.cron-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 14px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 10001;
+}
+
+.cron-toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* Impact Modal Buttons */
+#impactRecommendations .btn {
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+#impactRecommendations .btn-primary {
+    background: linear-gradient(135deg, #006d9c 0%, #005580 100%);
+    color: white;
+}
+
+#impactRecommendations .btn-primary:hover {
+    box-shadow: 0 4px 15px rgba(0, 109, 156, 0.4);
+    transform: translateY(-1px);
+}
+
+#impactRecommendations .btn:not(.btn-primary):not(.btn-warning) {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#impactRecommendations .btn:not(.btn-primary):not(.btn-warning):hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+#impactRecommendations .btn-warning {
+    background: linear-gradient(135deg, #dc4e41 0%, #c43d31 100%);
+    color: white;
+}
+
+#impactRecommendations .btn-warning:hover {
+    box-shadow: 0 4px 15px rgba(220, 78, 65, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Impact metrics loading */
+.impact-loading {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 20px;
+    font-style: italic;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .cron-preset-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .cron-fields {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    #impactRecommendations .btn {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+}

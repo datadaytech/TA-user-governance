@@ -1,0 +1,7 @@
+# Splunk local configs
+local/
+*.pyc
+__pycache__/
+.DS_Store
+*.log
+local.meta
