@@ -1,8 +1,11 @@
 <nav search_view="search" color="#00d4ff">
-  <view name="governance_dashboard" default="true" label="Governance Dashboard" />
+  <collection label="Governance">
+    <view name="governance_dashboard" default="true" label="Scheduled Searches" />
+    <view name="dashboard_governance" label="Dashboards" />
+  </collection>
   <view name="governance_demo" label="Demo Preview" />
   <view name="governance_settings" label="Settings" />
   <divider />
-  <a href="/manager/TA-user-governance/saved/searches?app=TA-user-governance" target="_blank">Scheduled Searches</a>
+  <a href="/manager/TA-user-governance/saved/searches?app=TA-user-governance" target="_blank">Manage Searches</a>
   <a href="/manager/TA-user-governance/data/lookup-table-files" target="_blank">Lookup Files</a>
 </nav>

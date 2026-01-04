@@ -1050,6 +1050,15 @@ require([
                 }
             });
 
+            // Watch for last action display token
+            defaultTokens.on('change:last_action_display', function(model, value) {
+                if (value) {
+                    $('#lastActionTimestamp').text(value);
+                } else {
+                    $('#lastActionTimestamp').text('No actions recorded');
+                }
+            });
+
             // Watch for metric popup token
             defaultTokens.on('change:show_metric_popup', function(model, value) {
                 if (value) {
@@ -1482,6 +1491,62 @@ require([
     window.openFlaggedModal = openFlaggedModal;
     window.viewFlaggedSearches = openFlaggedModal;
     window.openExtendModal = openExtendModal;
+
+    // ============================================
+    // DASHBOARD GOVERNANCE FUNCTIONS
+    // ============================================
+
+    window.flagSelectedDashboard = function() {
+        var searches = getSelectedSearches();
+        if (searches.length === 0) {
+            alert("Please select one or more dashboards using the checkboxes.");
+            return;
+        }
+
+        var dashboardList = searches.map(function(s) { return "• " + s.searchName; }).join("\n");
+        var msg = searches.length === 1
+            ? "Flag the following dashboard for review?\n\n" + dashboardList
+            : "Flag " + searches.length + " dashboards for review?\n\n" + dashboardList;
+
+        if (confirm(msg)) {
+            searches.forEach(function(s) {
+                logAction("flagged_dashboard", s.searchName, "Dashboard flagged for review - owner: " + s.owner);
+            });
+            showToast("✓ " + searches.length + " dashboard(s) flagged for review");
+        }
+    };
+
+    window.emailDashboardOwner = function() {
+        var searches = getSelectedSearches();
+        if (searches.length === 0) {
+            alert("Please select one or more dashboards using the checkboxes.");
+            return;
+        }
+
+        var owners = {};
+        searches.forEach(function(s) {
+            if (!owners[s.owner]) owners[s.owner] = [];
+            owners[s.owner].push(s.searchName);
+        });
+
+        var ownerList = Object.keys(owners).map(function(o) {
+            return o + " (" + owners[o].length + " dashboard" + (owners[o].length > 1 ? "s" : "") + ")";
+        }).join("\n");
+
+        alert("Email would be sent to:\n\n" + ownerList + "\n\n(Email integration not configured)");
+    };
+
+    window.openDashboard = function() {
+        var searches = getSelectedSearches();
+        if (searches.length === 0) {
+            alert("Please select a dashboard using the checkbox.");
+            return;
+        }
+
+        var dashboard = searches[0];
+        var url = "/app/" + dashboard.app + "/" + dashboard.searchName;
+        window.open(url, "_blank");
+    };
 
     // ============================================
     // METRIC POPUP FUNCTIONS

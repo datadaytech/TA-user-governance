@@ -7,6 +7,27 @@
     <set token="show_flagged_panel">true</set>
   </init>
 
+  <!-- Last Action Timestamp -->
+  <row>
+    <panel>
+      <html>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+          <span style="color: rgba(255,255,255,0.6); font-size: 12px;">LAST GOVERNANCE ACTION</span>
+          <span id="lastActionTimestamp" style="color: #00d4ff; font-weight: 600; font-size: 13px;">Loading...</span>
+        </div>
+      </html>
+      <search>
+        <query>| inputlookup governance_audit_log_lookup | sort - timestamp | head 1 | eval display = strftime(timestamp, "%Y-%m-%d %H:%M:%S") . " - " . action . " by " . performed_by | table display</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+        <refresh>30s</refresh>
+        <done>
+          <set token="last_action_display">$result.display$</set>
+        </done>
+      </search>
+    </panel>
+  </row>
+
   <!-- Summary Metrics Row -->
   <row>
     <panel>

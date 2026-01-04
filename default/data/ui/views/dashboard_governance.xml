@@ -1,0 +1,346 @@
+<dashboard version="1.1" theme="dark" script="governance.js" stylesheet="governance.css">
+  <label>Dashboard Governance</label>
+  <description>Monitor, flag, and enforce policies on wasteful or problematic dashboards</description>
+
+  <init>
+    <set token="show_flagged_panel">true</set>
+  </init>
+
+  <!-- Last Action Timestamp -->
+  <row>
+    <panel>
+      <html>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+          <span style="color: rgba(255,255,255,0.6); font-size: 12px;">LAST GOVERNANCE ACTION</span>
+          <span id="lastActionTimestamp" style="color: #00d4ff; font-weight: 600; font-size: 13px;">Loading...</span>
+        </div>
+      </html>
+      <search>
+        <query>| inputlookup governance_audit_log_lookup | sort - timestamp | head 1 | eval display = strftime(timestamp, "%Y-%m-%d %H:%M:%S") . " - " . action . " by " . performed_by | table display</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+        <refresh>30s</refresh>
+        <done>
+          <set token="last_action_display">$result.display$</set>
+        </done>
+      </search>
+    </panel>
+  </row>
+
+  <!-- Summary Metrics Row -->
+  <row>
+    <panel>
+      <single>
+        <title>Total Dashboards</title>
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0x006d9c"]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">total_dashboards</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Wasteful Dashboards</title>
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
+| search isDashboard=1 isVisible=1
+| rex field=eai:data max_match=100 "&lt;search&gt;(?&lt;search_block&gt;[\s\S]*?)&lt;/search&gt;"
+| eval search_count = mvcount(search_block)
+| where search_count > 10 OR match(eai:data, "earliest=-\d+[dh]|earliest=@")
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[3,8]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">wasteful_dashboards</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Rarely Accessed (30d)</title>
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
+| search isDashboard=1 isVisible=1
+| rename eai:acl.app as app, eai:acl.owner as owner
+| join type=left label [
+    | search index=_internal sourcetype=splunk_web_access uri_path="*data/ui/views*" earliest=-30d
+    | rex field=uri_path "/servicesNS/[^/]+/(?&lt;app&gt;[^/]+)/data/ui/views/(?&lt;label&gt;[^?]+)"
+    | stats count as access_count by label
+]
+| fillnull access_count value=0
+| where access_count &lt; 5
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[5,15]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">rarely_accessed</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>High Panel Count</title>
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
+| search isDashboard=1 isVisible=1
+| rex field=eai:data max_match=100 "&lt;panel&gt;"
+| eval panel_count = mvcount(eai:data)
+| where panel_count > 15
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[3,10]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">high_panel</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Long Time Ranges</title>
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
+| search isDashboard=1 isVisible=1
+| where match(eai:data, "earliest=-30d|earliest=-90d|earliest=-1y|earliest=0")
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[5,15]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">long_timerange</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Wasteful Dashboards Table -->
+  <row>
+    <panel>
+      <title>Wasteful Dashboards - Requires Review</title>
+      <table id="wasteful_dashboards_table">
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
+| search isDashboard=1 isVisible=1
+| rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing
+| rex field=eai:data max_match=100 "&lt;search&gt;(?&lt;search_block&gt;[\s\S]*?)&lt;/search&gt;"
+| rex field=eai:data max_match=100 "&lt;panel&gt;"
+| eval search_count = if(isnull(mvcount(search_block)), 0, mvcount(search_block))
+| eval panel_count = if(isnull(mvcount(eai:data)), 0, mvcount(eai:data))
+| eval has_long_range = if(match(eai:data, "earliest=-30d|earliest=-90d|earliest=-1y|earliest=0"), 1, 0)
+| eval has_all_time = if(match(eai:data, "earliest=0"), 1, 0)
+| eval waste_score = (search_count * 2) + (panel_count * 1) + (has_long_range * 10) + (has_all_time * 20)
+| where waste_score > 15
+| eval waste_reason = case(
+    has_all_time=1, "All-time searches",
+    has_long_range=1, "30+ day time range",
+    search_count > 15, "Many searches (".search_count.")",
+    panel_count > 15, "Many panels (".panel_count.")",
+    1=1, "Complex dashboard")
+| table label, owner, app, sharing, search_count, panel_count, waste_score, waste_reason
+| rename label as "Dashboard", owner as "Owner", app as "App", sharing as "Sharing", search_count as "Searches", panel_count as "Panels", waste_score as "Waste Score", waste_reason as "Issue"
+| sort - "Waste Score"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>5m</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Waste Score">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midValue="25"></scale>
+        </format>
+        <format type="color" field="Issue">
+          <colorPalette type="map">{"All-time searches":#DC4E41,"30+ day time range":#F8BE34,"Complex dashboard":#F1813F}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <div class="action-buttons" id="dashboard-actions">
+          <button class="btn btn-primary" onclick="flagSelectedDashboard()">Flag Dashboard</button>
+          <button class="btn" onclick="emailDashboardOwner()">Email Owner</button>
+          <button class="btn" onclick="openDashboard()">Open Dashboard</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- All Dashboards -->
+  <row>
+    <panel>
+      <title>All Dashboards</title>
+      <input type="dropdown" token="filter_app" searchWhenChanged="true">
+        <label>App Filter</label>
+        <choice value="*">All Apps</choice>
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 | stats count by eai:acl.app | rename eai:acl.app as app | fields app</query>
+        </search>
+        <fieldForLabel>app</fieldForLabel>
+        <fieldForValue>app</fieldForValue>
+        <default>*</default>
+      </input>
+      <input type="dropdown" token="filter_sharing" searchWhenChanged="true">
+        <label>Sharing</label>
+        <choice value="*">All</choice>
+        <choice value="global">Global</choice>
+        <choice value="app">App</choice>
+        <choice value="user">Private</choice>
+        <default>*</default>
+      </input>
+      <input type="text" token="filter_owner" searchWhenChanged="true">
+        <label>Owner Filter</label>
+        <default>*</default>
+      </input>
+      <table id="all_dashboards_table">
+        <search>
+          <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
+| search isDashboard=1 isVisible=1
+| rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing
+| search app=$filter_app$ sharing=$filter_sharing$ owner=$filter_owner$
+| rex field=eai:data max_match=100 "&lt;search&gt;(?&lt;search_block&gt;[\s\S]*?)&lt;/search&gt;"
+| eval search_count = if(isnull(mvcount(search_block)), 0, mvcount(search_block))
+| eval has_long_range = if(match(eai:data, "earliest=-30d|earliest=-90d|earliest=-1y|earliest=0"), "Yes", "No")
+| eval has_realtime = if(match(eai:data, "earliest=rt|latest=rt"), "Yes", "No")
+| eval waste_score = (search_count * 2) + if(has_long_range="Yes", 10, 0) + if(has_realtime="Yes", 20, 0)
+| eval status = case(
+    waste_score > 40, "Critical",
+    waste_score > 25, "Warning",
+    waste_score > 15, "Review",
+    1=1, "OK")
+| table label, owner, app, sharing, search_count, has_long_range, has_realtime, waste_score, status
+| rename label as "Dashboard", owner as "Owner", app as "App", sharing as "Sharing", search_count as "Searches", has_long_range as "Long Range", has_realtime as "Real-time", waste_score as "Waste Score", status as "Status"
+| sort - "Waste Score"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>5m</refresh>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">false</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"OK":#53A051,"Review":#F8BE34,"Warning":#F1813F,"Critical":#DC4E41}</colorPalette>
+        </format>
+        <format type="color" field="Waste Score">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midValue="25"></scale>
+        </format>
+        <format type="color" field="Long Range">
+          <colorPalette type="map">{"Yes":#F8BE34,"No":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="Real-time">
+          <colorPalette type="map">{"Yes":#DC4E41,"No":#53A051}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <div class="action-buttons" id="all-dashboards-actions">
+          <button class="btn btn-primary" onclick="flagSelectedDashboard()">Flag Selected</button>
+          <button class="btn" onclick="emailDashboardOwner()">Email Owner</button>
+          <button class="btn" onclick="openDashboard()">Open Dashboard</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Dashboard Usage Stats -->
+  <row>
+    <panel>
+      <title>Dashboard Access Frequency (Last 7 Days)</title>
+      <chart>
+        <search>
+          <query>index=_internal sourcetype=splunk_web_access uri_path="*data/ui/views*" earliest=-7d
+| rex field=uri_path "/servicesNS/[^/]+/(?&lt;app&gt;[^/]+)/data/ui/views/(?&lt;dashboard&gt;[^?]+)"
+| where isnotnull(dashboard)
+| timechart span=1d count by dashboard limit=10</query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="height">250</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Top Dashboard Users (Last 7 Days)</title>
+      <table>
+        <search>
+          <query>index=_internal sourcetype=splunk_web_access uri_path="*data/ui/views*" earliest=-7d
+| rex field=uri_path "/servicesNS/[^/]+/(?&lt;app&gt;[^/]+)/data/ui/views/(?&lt;dashboard&gt;[^?]+)"
+| where isnotnull(dashboard)
+| stats count as "Views" dc(dashboard) as "Dashboards" by user
+| sort - Views
+| head 10
+| rename user as "User"</query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Governance Activity -->
+  <row>
+    <panel>
+      <title>Recent Dashboard Governance Activity</title>
+      <table>
+        <search>
+          <query>| inputlookup governance_audit_log_lookup
+| search action="*dashboard*"
+| eval time = strftime(timestamp, "%Y-%m-%d %H:%M:%S")
+| sort - timestamp
+| head 20
+| table time, action, search_name, performed_by, details
+| rename time as "Time", action as "Action", search_name as "Dashboard", performed_by as "Performed By", details as "Details"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>1m</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Action">
+          <colorPalette type="map">{"flagged_dashboard":#F8BE34,"notification_sent":#006D9C,"disabled_dashboard":#DC4E41,"resolved":#53A051}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>
