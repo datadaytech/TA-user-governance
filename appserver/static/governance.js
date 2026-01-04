@@ -1049,6 +1049,35 @@ require([
                     openFlaggedModal();
                 }
             });
+
+            // Watch for metric popup token
+            defaultTokens.on('change:show_metric_popup', function(model, value) {
+                if (value) {
+                    var metricValue = defaultTokens.get('metric_value') || '0';
+                    var titleMap = {
+                        'total': 'Total Scheduled Searches',
+                        'suspicious': 'Suspicious Searches',
+                        'flagged': 'Currently Flagged',
+                        'pending': 'Pending Remediation',
+                        'disabled': 'Auto-Disabled (30 Days)'
+                    };
+                    var title = titleMap[value] || value;
+
+                    console.log("Token triggered metric popup:", value, metricValue, title);
+
+                    if (value === 'flagged') {
+                        openFlaggedModal();
+                    } else {
+                        openMetricPopup(value, metricValue, title);
+                    }
+
+                    // Clear the token so it can be triggered again
+                    setTimeout(function() {
+                        defaultTokens.unset('show_metric_popup');
+                        defaultTokens.unset('metric_value');
+                    }, 100);
+                }
+            });
         }
 
         // Cron modal events
@@ -1930,7 +1959,12 @@ require([
         // Setup click handlers for single value metric panels
         setTimeout(function() {
             setupMetricPanelClickHandlers();
-        }, 2000);
+        }, 3000);
+
+        // Re-setup after more time for slow renders
+        setTimeout(function() {
+            setupMetricPanelClickHandlers();
+        }, 5000);
 
         function setupMetricPanelClickHandlers() {
             console.log("Setting up metric panel click handlers");
@@ -1941,17 +1975,36 @@ require([
                 'Suspicious Searches': 'suspicious',
                 'Currently Flagged': 'flagged',
                 'Pending Remediation': 'pending',
-                'Auto-Disabled (30 Days)': 'disabled'
+                'Auto-Disabled': 'disabled'
             };
 
-            $('.dashboard-panel').each(function() {
+            // Find all panels with single value visualizations
+            $('.dashboard-row .dashboard-cell, .dashboard-panel').each(function() {
                 var $panel = $(this);
-                var $title = $panel.find('.panel-title, h2.panel-title, .panel-head h3').first();
-                var titleText = $title.text().trim();
 
-                // Check if this is a single value panel
-                var $single = $panel.find('.single-result, .single-value');
-                if ($single.length === 0) return;
+                // Skip if already setup
+                if ($panel.attr('data-metric-setup') === 'true') return;
+
+                // Try multiple ways to find the title
+                var titleText = '';
+                var $titleEl = $panel.find('.panel-title').first();
+                if ($titleEl.length) {
+                    titleText = $titleEl.text().trim();
+                }
+                if (!titleText) {
+                    $titleEl = $panel.find('h2, h3').first();
+                    titleText = $titleEl.text().trim();
+                }
+                if (!titleText) {
+                    $titleEl = $panel.find('[data-title]');
+                    titleText = $titleEl.attr('data-title') || '';
+                }
+
+                // Check if this has a single value viz
+                var hasSingleViz = $panel.find('.single-result, .single-value, .viz-single-value, [data-view="splunkjs/mvc/simplexml/element/single"]').length > 0;
+                if (!hasSingleViz) return;
+
+                console.log("Found single value panel:", titleText);
 
                 // Find matching metric type
                 var metricType = null;
@@ -1962,21 +2015,31 @@ require([
                     }
                 }
 
-                if (!metricType) return;
+                if (!metricType) {
+                    console.log("No metric type match for:", titleText);
+                    return;
+                }
 
-                // Make panel clickable
-                $panel.css('cursor', 'pointer');
+                console.log("Setting up click handler for:", titleText, "->", metricType);
+
+                // Mark as setup
+                $panel.attr('data-metric-setup', 'true');
                 $panel.attr('data-metric-type', metricType);
-                $panel.attr('title', 'Click to view details');
+                $panel.css('cursor', 'pointer');
 
-                // Remove existing handlers and add new one
+                // Add click handler
                 $panel.off('click.metric').on('click.metric', function(e) {
-                    if ($(e.target).is('button, a')) return;
+                    // Don't trigger if clicking on a button or link
+                    if ($(e.target).closest('button, a').length) return;
 
                     var type = $(this).attr('data-metric-type');
-                    var $singleVal = $(this).find('.single-result, .single-value');
-                    var value = $singleVal.text().trim() || '0';
-                    var title = $(this).find('.panel-title, h2.panel-title, .panel-head h3').first().text().trim();
+
+                    // Get the displayed value
+                    var $singleVal = $(this).find('.single-result, .single-value, .viz-single-value .single-result');
+                    var value = $singleVal.first().text().trim() || '0';
+
+                    // Get title
+                    var title = $(this).find('.panel-title, h2, h3').first().text().trim();
 
                     console.log("Metric panel clicked:", type, value, title);
 

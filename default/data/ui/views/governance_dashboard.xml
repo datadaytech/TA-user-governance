@@ -18,9 +18,13 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">total</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
       </single>
     </panel>
     <panel>
@@ -32,10 +36,14 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[5,10]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">suspicious</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
       </single>
     </panel>
     <panel id="flagged_metric_panel">
@@ -65,10 +73,14 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[2,5]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">pending</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
       </single>
     </panel>
     <panel>
@@ -80,9 +92,13 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_metric_popup">disabled</set>
+          <set token="metric_value">$click.value$</set>
+        </drilldown>
       </single>
     </panel>
   </row>
