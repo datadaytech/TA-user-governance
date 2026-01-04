@@ -38,8 +38,8 @@
         <option name="useColors">1</option>
       </single>
     </panel>
-    <panel>
-      <single>
+    <panel id="flagged_metric_panel">
+      <single id="flagged_metric">
         <title>Currently Flagged</title>
         <search>
           <query>| inputlookup flagged_searches_lookup | search status IN ("pending", "notified") | stats count</query>
@@ -47,10 +47,13 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[3,7]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="show_flagged_modal">true</set>
+        </drilldown>
       </single>
     </panel>
     <panel>
@@ -102,7 +105,7 @@
           <refresh>5m</refresh>
         </search>
         <option name="count">10</option>
-        <option name="drilldown">row</option>
+        <option name="drilldown">none</option>
         <option name="rowNumbers">true</option>
         <option name="wrap">true</option>
         <format type="color" field="Runtime Ratio %">
@@ -112,12 +115,6 @@
         <format type="color" field="Flagged">
           <colorPalette type="map">{"Yes":#DC4E41,"No":#53A051}</colorPalette>
         </format>
-        <drilldown>
-          <set token="selected_search">$row.Search Name$</set>
-          <set token="selected_owner">$row.Owner$</set>
-          <set token="selected_app">$row.App$</set>
-          <set token="selected_reason">$row.Reason$</set>
-        </drilldown>
       </table>
       <html>
         <div class="action-buttons" id="suspicious-actions">
@@ -125,6 +122,7 @@
           <button class="btn" id="preview-impact-btn" onclick="previewImpact()">Preview Impact</button>
           <button class="btn" id="track-search-btn" onclick="trackSearch()">Track Search</button>
           <button class="btn" id="email-owner-btn" onclick="emailOwner()">Email Owner</button>
+          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" onclick="viewFlaggedSearches()">View Flagged Searches</button>
         </div>
       </html>
     </panel>
@@ -175,7 +173,7 @@
           <refresh>5m</refresh>
         </search>
         <option name="count">20</option>
-        <option name="drilldown">row</option>
+        <option name="drilldown">none</option>
         <option name="rowNumbers">true</option>
         <option name="wrap">false</option>
         <format type="color" field="Status">
@@ -185,11 +183,6 @@
           <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
           <scale type="minMidMax" midValue="10"></scale>
         </format>
-        <drilldown>
-          <set token="selected_search">$row.Search Name$</set>
-          <set token="selected_owner">$row.Owner$</set>
-          <set token="selected_app">$row.App$</set>
-        </drilldown>
       </table>
       <html>
         <div class="action-buttons" id="all-searches-actions">
@@ -197,27 +190,33 @@
           <button class="btn" id="preview-btn-2" onclick="previewImpact()">Preview Impact</button>
           <button class="btn" id="track-btn-2" onclick="trackSearch()">Track Search</button>
           <button class="btn" id="email-btn-2" onclick="emailOwner()">Email Owner</button>
+          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" onclick="viewFlaggedSearches()">View Flagged</button>
         </div>
       </html>
     </panel>
   </row>
 
-  <!-- Flagged Searches Management Panel -->
+  <!-- Flagged Searches - Pending Remediation -->
   <row depends="$show_flagged_panel$">
     <panel>
-      <title>Flagged Searches Management</title>
+      <title>Flagged Searches - Pending Remediation</title>
       <table id="flagged_searches_table">
         <search>
-          <query>| `get_flagged_searches`
-| table search_name, search_owner, search_app, flagged_by, flagged_date, deadline_date, days_remaining, status_display, reason, notes
-| rename search_name as "Search Name", search_owner as "Owner", search_app as "App", flagged_by as "Flagged By", flagged_date as "Flagged Date", deadline_date as "Deadline", days_remaining as "Days Remaining", status_display as "Status", reason as "Reason", notes as "Notes"
+          <query>| inputlookup flagged_searches_lookup
+| search status IN ("pending", "notified")
+| eval flagged_date = strftime(flagged_time, "%Y-%m-%d")
+| eval deadline_date = strftime(remediation_deadline, "%Y-%m-%d")
+| eval days_remaining = round((remediation_deadline - now()) / 86400, 1)
+| eval status_display = case(status="pending", "Pending Notification", status="notified", "Awaiting Remediation", 1=1, status)
+| table search_name, search_owner, search_app, flagged_by, flagged_date, deadline_date, days_remaining, status_display, reason
+| rename search_name as "Search Name", search_owner as "Owner", search_app as "App", flagged_by as "Flagged By", flagged_date as "Flagged Date", deadline_date as "Deadline", days_remaining as "Days Remaining", status_display as "Status", reason as "Reason"
 | sort days_remaining</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
           <refresh>1m</refresh>
         </search>
         <option name="count">10</option>
-        <option name="drilldown">row</option>
+        <option name="drilldown">none</option>
         <option name="rowNumbers">true</option>
         <format type="color" field="Days Remaining">
           <colorPalette type="minMidMax" maxColor="#53A051" midColor="#F8BE34" minColor="#DC4E41"></colorPalette>
@@ -226,18 +225,13 @@
         <format type="color" field="Status">
           <colorPalette type="map">{"Pending Notification":#F8BE34,"Awaiting Remediation":#F1813F,"Disabled":#DC4E41,"Resolved":#53A051}</colorPalette>
         </format>
-        <drilldown>
-          <set token="manage_search">$row.Search Name$</set>
-          <set token="manage_owner">$row.Owner$</set>
-          <set token="manage_status">$row.Status$</set>
-        </drilldown>
       </table>
       <html>
         <div class="action-buttons" id="flagged-actions">
-          <button class="btn btn-primary" id="send-reminder-btn" onclick="sendReminder()">Send Reminder</button>
-          <button class="btn" id="extend-deadline-btn" onclick="extendDeadline()">Extend Deadline (+7 days)</button>
-          <button class="btn btn-warning" id="disable-now-btn" onclick="disableNow()">Disable Now</button>
-          <button class="btn" id="unflag-btn" onclick="unflagSearch()">Unflag / Mark Resolved</button>
+          <button class="btn btn-primary" id="send-reminder-btn">Send Reminder</button>
+          <button class="btn" id="extend-deadline-btn">Extend Deadline</button>
+          <button class="btn btn-warning" id="disable-now-btn">Disable Now</button>
+          <button class="btn" id="unflag-btn">Unflag / Mark Resolved</button>
         </div>
       </html>
     </panel>

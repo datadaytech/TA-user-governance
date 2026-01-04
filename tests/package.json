@@ -1,0 +1,21 @@
+{
+  "name": "ta-user-governance-tests",
+  "version": "1.0.0",
+  "description": "Playwright functional tests for TA-user-governance Splunk app",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "test:ui": "npx playwright test --ui",
+    "report": "npx playwright show-report",
+    "start-splunk": "docker start splunk-dev && echo 'Waiting for Splunk...' && sleep 30",
+    "stop-splunk": "docker stop splunk-dev"
+  },
+  "keywords": ["splunk", "testing", "playwright", "governance"],
+  "author": "DataDay Technology Solutions",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

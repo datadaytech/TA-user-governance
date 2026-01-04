@@ -599,6 +599,305 @@
     font-style: italic;
 }
 
+/* Selected row styling */
+.row-selected {
+    background: rgba(0, 212, 255, 0.2) !important;
+    box-shadow: inset 0 0 0 2px #00d4ff;
+}
+
+.row-selected td {
+    background: transparent !important;
+}
+
+/* Flagged row styling - NO red rows, just flag indicator */
+.row-flagged {
+    /* No red background - use flag indicator only */
+}
+
+.row-flagged td {
+    background: transparent !important;
+}
+
+/* In flagged panel, don't use red row styling */
+#flagged_searches_table .row-flagged {
+    background: transparent !important;
+    border-left: 3px solid transparent !important;
+    animation: none !important;
+}
+
+@keyframes flagPulse {
+    0% {
+        background: rgba(220, 78, 65, 0.5) !important;
+        transform: scale(1.01);
+    }
+    50% {
+        background: rgba(220, 78, 65, 0.3) !important;
+    }
+    100% {
+        background: rgba(220, 78, 65, 0.15) !important;
+        transform: scale(1);
+    }
+}
+
+/* Flag success checkmark animation */
+.flag-success-indicator {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #53a051;
+    font-size: 18px;
+    animation: checkPop 0.4s ease-out;
+}
+
+@keyframes checkPop {
+    0% {
+        transform: translateY(-50%) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: translateY(-50%) scale(1.3);
+    }
+    100% {
+        transform: translateY(-50%) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Smoother row transitions */
+.governance-enhanced {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.governance-enhanced:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    transform: translateX(2px);
+}
+
+/* Selected row with glow effect */
+.row-selected {
+    background: rgba(0, 212, 255, 0.15) !important;
+    box-shadow: inset 4px 0 0 #00d4ff, 0 0 20px rgba(0, 212, 255, 0.1);
+    animation: selectGlow 0.3s ease-out;
+}
+
+@keyframes selectGlow {
+    0% {
+        box-shadow: inset 4px 0 0 #00d4ff, 0 0 40px rgba(0, 212, 255, 0.4);
+    }
+    100% {
+        box-shadow: inset 4px 0 0 #00d4ff, 0 0 20px rgba(0, 212, 255, 0.1);
+    }
+}
+
+/* Quick flag button */
+.quick-flag-btn {
+    opacity: 0.6;
+    transition: all 0.2s ease;
+}
+
+.quick-flag-btn:hover {
+    opacity: 1;
+    transform: scale(1.2);
+    text-shadow: 0 0 10px rgba(248, 190, 52, 0.8);
+}
+
+/* Governance enhanced rows */
+.governance-enhanced {
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.governance-enhanced:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Row actions container */
+.row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Multi-select checkboxes - governance tables */
+.gov-select-header,
+.gov-checkbox-cell {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding: 8px !important;
+}
+
+.gov-select-all,
+.gov-checkbox {
+    width: 18px !important;
+    height: 18px !important;
+    cursor: pointer !important;
+    accent-color: #00d4ff !important;
+    margin: 0 !important;
+    -webkit-appearance: checkbox !important;
+    appearance: checkbox !important;
+}
+
+/* Ensure checkbox is visible */
+input[type="checkbox"].gov-checkbox,
+input[type="checkbox"].gov-select-all {
+    opacity: 1 !important;
+    visibility: visible !important;
+    position: relative !important;
+}
+
+/* Checkbox checked row highlight */
+tr.gov-enhanced:has(.gov-checkbox:checked) {
+    background: rgba(0, 212, 255, 0.15) !important;
+}
+
+/* Checked checkbox visual feedback - filled appearance */
+.gov-checkbox:checked,
+.gov-select-all:checked {
+    background-color: #00d4ff !important;
+    border-color: #00d4ff !important;
+    accent-color: #00d4ff !important;
+    position: relative;
+}
+
+/* Custom checkbox styling for better visibility */
+.gov-checkbox,
+.gov-select-all {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    width: 20px !important;
+    height: 20px !important;
+    border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    border-radius: 4px !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    position: relative !important;
+}
+
+.gov-checkbox:hover,
+.gov-select-all:hover {
+    border-color: #00d4ff !important;
+    background: rgba(0, 212, 255, 0.2) !important;
+}
+
+.gov-checkbox:checked,
+.gov-select-all:checked {
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%) !important;
+    border-color: #00d4ff !important;
+}
+
+/* Checkmark inside checked checkbox */
+.gov-checkbox:checked::after,
+.gov-select-all:checked::after {
+    content: '✓' !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    color: white !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    line-height: 1 !important;
+}
+
+/* Row with checked checkbox - blue highlight only */
+tr:has(.gov-checkbox:checked) {
+    background: rgba(0, 212, 255, 0.15) !important;
+    border-left: 3px solid #00d4ff !important;
+}
+
+tr:has(.gov-checkbox:checked) td {
+    background: transparent !important;
+}
+
+/* Selection count badge */
+.selection-count-badge {
+    position: fixed;
+    bottom: 80px;
+    right: 24px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    display: none;
+}
+
+.selection-count-badge.show {
+    display: block;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Flagged Searches Panel - Better readability (no red rows) */
+#flagged_searches_table tbody tr {
+    background: rgba(0, 0, 0, 0.2) !important;
+    border-left: 3px solid transparent !important;
+}
+
+#flagged_searches_table tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+
+#flagged_searches_table tbody tr:hover {
+    background: rgba(0, 109, 156, 0.2) !important;
+}
+
+#flagged_searches_table tbody tr td {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Tracked searches styling */
+.tracked-indicator {
+    color: #00d4ff;
+    margin-right: 6px;
+    font-size: 12px;
+}
+
+/* Extend deadline modal input */
+.extend-days-input {
+    width: 80px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-size: 16px;
+    text-align: center;
+    margin: 0 10px;
+}
+
+.extend-days-input:focus {
+    outline: none;
+    border-color: #00d4ff;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+
+/* Flag indicator styling */
+.flag-indicator {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.flag-indicator:hover {
+    transform: scale(1.2);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .cron-preset-grid {
@@ -611,4 +910,414 @@
         width: 100%;
         margin-bottom: 8px;
     }
+}
+
+/* ============================================
+   Metric Popup Styles (for single value panels)
+   ============================================ */
+
+.metric-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.metric-popup-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.metric-popup {
+    background: linear-gradient(145deg, #2a2a35 0%, #1c1c21 100%);
+    border-radius: 16px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow: hidden;
+    transform: scale(0.9) translateY(20px);
+    transition: all 0.3s ease;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 212, 255, 0.1);
+}
+
+.metric-popup-overlay.active .metric-popup {
+    transform: scale(1) translateY(0);
+}
+
+.metric-popup-header {
+    padding: 24px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.metric-popup-value {
+    font-size: 64px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
+    margin-bottom: 8px;
+}
+
+.metric-popup-title {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+}
+
+.metric-popup-body {
+    padding: 24px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.metric-popup-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.metric-popup-list li {
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.metric-popup-list li:hover {
+    background: rgba(0, 109, 156, 0.2);
+    border-left-color: #00d4ff;
+}
+
+.metric-popup-list li .name {
+    color: white;
+    font-weight: 500;
+}
+
+.metric-popup-list li .detail {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+}
+
+.metric-popup-footer {
+    padding: 16px 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.metric-popup-footer .btn {
+    padding: 10px 30px;
+}
+
+/* ============================================
+   Cron Impact Preview Styles
+   ============================================ */
+
+.cron-impact-section {
+    background: linear-gradient(135deg, rgba(248, 190, 52, 0.1) 0%, rgba(220, 78, 65, 0.1) 100%);
+    border: 1px solid rgba(248, 190, 52, 0.3);
+    border-radius: 10px;
+    padding: 18px;
+    margin: 20px 0;
+}
+
+.cron-impact-header {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f8be34;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.cron-impact-comparison {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 12px;
+}
+
+.cron-impact-old,
+.cron-impact-new {
+    text-align: center;
+    padding: 12px 20px;
+    border-radius: 8px;
+    min-width: 120px;
+}
+
+.cron-impact-old {
+    background: rgba(220, 78, 65, 0.2);
+    border: 1px solid rgba(220, 78, 65, 0.4);
+}
+
+.cron-impact-new {
+    background: rgba(83, 160, 81, 0.2);
+    border: 1px solid rgba(83, 160, 81, 0.4);
+}
+
+.cron-impact-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.cron-impact-value {
+    font-size: 16px;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+.cron-impact-old .cron-impact-value {
+    color: #dc4e41;
+}
+
+.cron-impact-new .cron-impact-value {
+    color: #53a051;
+}
+
+.cron-impact-arrow {
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.cron-impact-change {
+    text-align: center;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+}
+
+.cron-impact-percent {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.cron-impact-percent.decrease {
+    color: #53a051;
+}
+
+.cron-impact-percent.increase {
+    color: #dc4e41;
+}
+
+.cron-impact-percent.neutral {
+    color: #f8be34;
+}
+
+.cron-impact-description {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 4px;
+}
+
+/* ============================================
+   Extend Deadline Modal Styles
+   ============================================ */
+
+.extend-modal-content {
+    text-align: center;
+    padding: 20px;
+}
+
+.extend-search-list {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 20px 0;
+    max-height: 150px;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.extend-search-item {
+    padding: 8px 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    border-left: 3px solid #00d4ff;
+    margin-bottom: 8px;
+    background: rgba(0, 212, 255, 0.05);
+    border-radius: 0 4px 4px 0;
+}
+
+.extend-days-section {
+    margin: 24px 0;
+}
+
+.extend-days-label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 12px;
+}
+
+.extend-days-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.extend-days-btn {
+    padding: 14px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.extend-days-btn:hover {
+    background: rgba(0, 212, 255, 0.15);
+    border-color: rgba(0, 212, 255, 0.4);
+}
+
+.extend-days-btn.active {
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+    border-color: #00d4ff;
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+}
+
+.extend-days-btn .days-value {
+    font-size: 20px;
+    font-weight: 700;
+    display: block;
+}
+
+.extend-days-btn .days-label {
+    font-size: 10px;
+    opacity: 0.7;
+    text-transform: uppercase;
+}
+
+.extend-custom-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.extend-custom-input {
+    width: 80px;
+    padding: 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.extend-custom-input:focus {
+    outline: none;
+    border-color: #00d4ff;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+
+.extend-deadline-preview {
+    margin-top: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+.extend-deadline-preview-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.extend-deadline-preview-date {
+    font-size: 18px;
+    font-weight: 600;
+    color: #00d4ff;
+}
+
+/* ============================================
+   Cron Helper/Presets Improved
+   ============================================ */
+
+.cron-helper-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cron-helper-title {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+
+.cron-helper-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.cron-helper-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.cron-helper-item .symbol {
+    font-family: monospace;
+    color: #00d4ff;
+    font-weight: 600;
+    min-width: 30px;
+}
+
+.cron-helper-item .desc {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* Single value panel clickable */
+.dashboard-panel:has(.single-value) {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.dashboard-panel:has(.single-value):hover {
+    transform: scale(1.02);
+}
+
+.dashboard-panel:has(.single-value):hover .single-value {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
 }
