@@ -1005,6 +1005,20 @@ tr:has(.gov-checkbox:checked) td {
 .metric-popup-list li:hover {
     background: rgba(0, 109, 156, 0.2);
     border-left-color: #00d4ff;
+    cursor: pointer;
+    transform: translateX(4px);
+}
+
+.metric-popup-list li::after {
+    content: '→';
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.metric-popup-list li:hover::after {
+    color: #00d4ff;
+    transform: translateX(4px);
 }
 
 .metric-popup-list li .name {

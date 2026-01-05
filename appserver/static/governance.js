@@ -307,8 +307,19 @@ require([
     // GLOBAL FUNCTIONS (exposed to window)
     // ============================================
 
+    // Debounce flag to prevent duplicate prompts from multiple event handlers
+    var flagInProgress = false;
+
     window.flagSelectedSearch = function() {
         console.log("flagSelectedSearch called");
+
+        // Prevent duplicate calls from multiple handlers
+        if (flagInProgress) {
+            console.log("flagSelectedSearch: already in progress, skipping");
+            return;
+        }
+        flagInProgress = true;
+        setTimeout(function() { flagInProgress = false; }, 500);
 
         var searches = getSelectedSearches();
         if (searches.length === 0) {
@@ -745,12 +756,27 @@ require([
 
     window.previewImpact = function() {
         console.log("previewImpact called");
-        var searchName = getToken("selected_search");
-        var owner = getToken("selected_owner");
-        var app = getToken("selected_app");
+
+        // First try to get from checkbox selections
+        var searches = getSelectedSearches();
+        var searchName, owner, app;
+
+        if (searches.length > 0) {
+            // Use first selected search from checkbox
+            searchName = searches[0].searchName;
+            owner = searches[0].owner;
+            app = searches[0].app;
+            console.log("previewImpact: using checkbox selection", searchName);
+        } else {
+            // Fallback to token-based selection
+            searchName = getToken("selected_search");
+            owner = getToken("selected_owner");
+            app = getToken("selected_app");
+            console.log("previewImpact: using token selection", searchName);
+        }
 
         if (!searchName) {
-            alert("Please select a search from the table first.");
+            alert("Please select a search using the checkbox or by clicking on a row.");
             return;
         }
 
@@ -1610,7 +1636,10 @@ require([
                         var detail = row[1] || '';
                         if (row[2]) detail += ' | ' + row[2];
 
-                        html += '<li><span class="name">' + escapeHtml(name) + '</span><span class="detail">' + escapeHtml(detail) + '</span></li>';
+                        html += '<li class="metric-popup-item" data-search-name="' + escapeHtml(name) + '" style="cursor: pointer;" title="Click to view in Flagged panel">' +
+                            '<span class="name">' + escapeHtml(name) + '</span>' +
+                            '<span class="detail">' + escapeHtml(detail) + '</span>' +
+                            '</li>';
                     }
                     $('#metricPopupList').html(html);
                 });
@@ -1623,6 +1652,70 @@ require([
     }
 
     window.openMetricPopup = openMetricPopup;
+
+    // Handle click on metric popup items - drill down to flagged panel
+    $(document).on('click', '.metric-popup-item', function(e) {
+        var searchName = $(this).attr('data-search-name');
+        console.log("Metric popup item clicked:", searchName);
+
+        if (!searchName) return;
+
+        // Close the metric popup
+        $('#metricPopupOverlay').removeClass('active');
+
+        // Find the flagged searches panel
+        var $flaggedPanel = $('.dashboard-panel').filter(function() {
+            return $(this).find('.panel-title, h3').text().indexOf('Flagged Searches') > -1;
+        });
+
+        if ($flaggedPanel.length) {
+            // Scroll to the flagged panel
+            $('html, body').animate({
+                scrollTop: $flaggedPanel.offset().top - 100
+            }, 500);
+
+            // Find and highlight the row with this search name
+            setTimeout(function() {
+                var $targetRow = $flaggedPanel.find('tr[data-search="' + searchName + '"]');
+                if ($targetRow.length) {
+                    // Highlight the row
+                    $targetRow.addClass('row-selected');
+                    var $checkbox = $targetRow.find('.gov-checkbox');
+                    if ($checkbox.length) {
+                        $checkbox.prop('checked', true);
+                    }
+                    updateSelectedSearches();
+
+                    // Pulse animation for visibility
+                    $targetRow.css({
+                        'box-shadow': '0 0 20px rgba(0, 212, 255, 0.5)',
+                        'transition': 'box-shadow 0.3s ease'
+                    });
+                    setTimeout(function() {
+                        $targetRow.css('box-shadow', '');
+                    }, 2000);
+
+                    showToast("Found: " + searchName);
+                } else {
+                    // Search might be in a different table, try All Scheduled Searches
+                    var $allSearches = $('tr[data-search="' + searchName + '"]');
+                    if ($allSearches.length) {
+                        $('html, body').animate({
+                            scrollTop: $allSearches.first().offset().top - 100
+                        }, 500);
+                        $allSearches.first().addClass('row-selected');
+                        $allSearches.first().find('.gov-checkbox').prop('checked', true);
+                        updateSelectedSearches();
+                        showToast("Found: " + searchName);
+                    } else {
+                        showToast("Search not found in current view");
+                    }
+                }
+            }, 600);
+        } else {
+            showToast("Flagged panel not found");
+        }
+    });
 
     // ============================================
     // TABLE ENHANCEMENT - Make cron clickable
@@ -1765,6 +1858,13 @@ require([
         var $table = $(this).closest('table');
         $table.find('.gov-checkbox').each(function() {
             this.checked = isChecked;
+            // Update row visual state
+            var $row = $(this).closest('tr');
+            if (isChecked) {
+                $row.addClass('row-selected');
+            } else {
+                $row.removeClass('row-selected');
+            }
         });
         updateSelectedSearches();
     });
@@ -1772,6 +1872,20 @@ require([
     // Handle individual checkbox click
     $(document).on('click', '.gov-checkbox', function(e) {
         e.stopPropagation();
+
+        // Toggle the checkbox state explicitly (in case default behavior is blocked)
+        var $checkbox = $(this);
+        var isNowChecked = $checkbox.prop('checked');
+        console.log("Checkbox clicked, now checked:", isNowChecked);
+
+        // Update row visual state
+        var $row = $checkbox.closest('tr');
+        if (isNowChecked) {
+            $row.addClass('row-selected');
+        } else {
+            $row.removeClass('row-selected');
+        }
+
         updateSelectedSearches();
 
         // Update select-all state
@@ -1844,7 +1958,16 @@ require([
 
         // Toggle checkbox for this row
         var $checkbox = $row.find('.gov-checkbox');
-        $checkbox.prop('checked', !$checkbox.prop('checked'));
+        var newState = !$checkbox.prop('checked');
+        $checkbox.prop('checked', newState);
+
+        // Update row visual state
+        if (newState) {
+            $row.addClass('row-selected');
+        } else {
+            $row.removeClass('row-selected');
+        }
+
         updateSelectedSearches();
 
         // Update select-all state
