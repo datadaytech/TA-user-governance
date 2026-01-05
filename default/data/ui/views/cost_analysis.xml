@@ -1,0 +1,280 @@
+<dashboard version="1.1" theme="dark" script="governance.js" stylesheet="governance.css">
+  <label>Cost Analysis</label>
+  <description>Quantify resource usage and cost savings from governance enforcement</description>
+
+  <!-- Cost Summary Row -->
+  <row>
+    <panel>
+      <single>
+        <title>Total Monthly Cost (Active Searches)</title>
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| stats sum(monthly_total_cost) as total_monthly_cost
+| eval display = "$".tostring(round(total_monthly_cost, 0))</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[500,2000]</option>
+        <option name="useColors">1</option>
+        <option name="unit">$</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Estimated Annual Cost</title>
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| stats sum(annual_cost) as total_annual_cost
+| eval display = "$".tostring(round(total_annual_cost, 0))</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[6000,24000]</option>
+        <option name="useColors">1</option>
+        <option name="unit">$</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Monthly Savings (Disabled Searches)</title>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| search status="disabled"
+| join type=left search_name [| `analyze_search_costs` | rename title as search_name]
+| eval monthly_saved = if(isnotnull(monthly_total_cost), monthly_total_cost, 25)
+| stats sum(monthly_saved) as total_monthly_savings</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x708794","0x53a051","0x65a637"]</option>
+        <option name="rangeValues">[50,200]</option>
+        <option name="useColors">1</option>
+        <option name="unit">$</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Annual Savings Potential</title>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| search status="disabled"
+| join type=left search_name [| `analyze_search_costs` | rename title as search_name]
+| eval monthly_saved = if(isnotnull(monthly_total_cost), monthly_total_cost, 25)
+| stats sum(monthly_saved) as total_monthly_savings
+| eval annual_savings = total_monthly_savings * 12</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x708794","0x53a051","0x65a637"]</option>
+        <option name="rangeValues">[600,2400]</option>
+        <option name="useColors">1</option>
+        <option name="unit">$</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Searches Optimized</title>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| search status="disabled"
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x708794","0x53a051","0x65a637"]</option>
+        <option name="rangeValues">[5,20]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Cost Breakdown Charts -->
+  <row>
+    <panel>
+      <title>Monthly Cost by Application</title>
+      <chart>
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| stats sum(monthly_total_cost) as cost by app
+| sort - cost
+| head 15
+| eval cost = round(cost, 2)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleY.text">Monthly Cost ($)</option>
+        <option name="height">300</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Monthly Cost by Owner</title>
+      <chart>
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| stats sum(monthly_total_cost) as cost by owner
+| sort - cost
+| head 15
+| eval cost = round(cost, 2)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleY.text">Monthly Cost ($)</option>
+        <option name="height">300</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- Cost Distribution -->
+  <row>
+    <panel>
+      <title>Cost Tier Distribution</title>
+      <chart>
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| stats count by cost_tier
+| eval sort_order = case(
+    cost_tier="Critical", 1,
+    cost_tier="High", 2,
+    cost_tier="Medium", 3,
+    cost_tier="Low", 4,
+    1=1, 5)
+| sort sort_order
+| fields - sort_order</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="height">300</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Resource Usage Breakdown</title>
+      <chart>
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| stats sum(monthly_cpu_cost) as "CPU Cost" sum(monthly_data_cost) as "Data Cost" sum(monthly_total_cost) as "Total Cost"
+| transpose
+| rename column as "Cost Type", "row 1" as "Monthly Cost ($)"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="height">300</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- High Cost Searches Table -->
+  <row>
+    <panel>
+      <title>Highest Cost Scheduled Searches - Optimization Candidates</title>
+      <table id="high_cost_table">
+        <search>
+          <query>| `analyze_search_costs`
+| search disabled=0
+| eval monthly_cost_display = "$".tostring(round(monthly_total_cost, 2))
+| eval annual_cost_display = "$".tostring(round(annual_cost, 2))
+| table title, owner, app, cron_schedule, frequency_label, runs_per_month, monthly_cost_display, annual_cost_display, cost_tier
+| rename title as "Search Name", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", runs_per_month as "Runs/Month", monthly_cost_display as "Monthly Cost", annual_cost_display as "Annual Cost", cost_tier as "Cost Tier"
+| head 25</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Cost Tier">
+          <colorPalette type="map">{"Critical":#DC4E41,"High":#F1813F,"Medium":#F8BE34,"Low":#53A051,"Minimal":#708794}</colorPalette>
+        </format>
+        <format type="color" field="Monthly Cost">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midValue="25"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- Savings Detail -->
+  <row>
+    <panel>
+      <title>Governance Actions - Cost Impact</title>
+      <table>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| search status="disabled"
+| join type=left search_name [| `analyze_search_costs` | rename title as search_name]
+| eval disabled_date = strftime(flagged_time, "%Y-%m-%d")
+| eval monthly_saved = if(isnotnull(monthly_total_cost), monthly_total_cost, 25)
+| eval monthly_saved_display = "$".tostring(round(monthly_saved, 2))
+| eval annual_saved_display = "$".tostring(round(monthly_saved * 12, 2))
+| table search_name, search_owner, search_app, disabled_date, monthly_saved_display, annual_saved_display, reason
+| rename search_name as "Search Name", search_owner as "Owner", search_app as "App", disabled_date as "Disabled Date", monthly_saved_display as "Monthly Savings", annual_saved_display as "Annual Savings", reason as "Reason"
+| sort - "Monthly Savings"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Monthly Savings">
+          <colorPalette type="minMidMax" maxColor="#65A637" midColor="#53A051" minColor="#708794"></colorPalette>
+          <scale type="minMidMax" midValue="25"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ROI Summary -->
+  <row>
+    <panel>
+      <title>Governance ROI Summary</title>
+      <html>
+        <div style="background: linear-gradient(135deg, rgba(83, 160, 81, 0.15) 0%, rgba(101, 166, 55, 0.15) 100%); border: 1px solid rgba(83, 160, 81, 0.3); border-radius: 12px; padding: 24px; text-align: center;">
+          <h3 style="color: #53a051; margin-bottom: 16px; font-size: 18px;">Cost Optimization Through Governance</h3>
+          <p style="color: rgba(255,255,255,0.8); font-size: 14px; line-height: 1.6;">
+            This dashboard tracks the financial impact of governance actions on scheduled searches.
+            By identifying and disabling wasteful or problematic searches, organizations can significantly
+            reduce their Splunk operational costs while maintaining data quality and system performance.
+          </p>
+          <div style="margin-top: 20px; display: flex; justify-content: center; gap: 40px;">
+            <div style="text-align: center;">
+              <div style="font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">Cost Model</div>
+              <div style="font-size: 14px; color: white; margin-top: 4px;">$0.001/CPU-sec + $0.05/GB scanned</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">Optimization Target</div>
+              <div style="font-size: 14px; color: white; margin-top: 4px;">High-frequency &amp; long-running searches</div>
+            </div>
+          </div>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+</dashboard>

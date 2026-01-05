@@ -1830,9 +1830,19 @@ require([
                 }
 
                 // Add flag icon ONLY on Search Name column, ONLY if flagged (red flag), NO yellow flags
-                if (!isFlaggedPanel && searchNameColIndex >= 0) {
-                    var $searchNameCell = $cells.eq(searchNameColIndex);
-                    if (!$searchNameCell.find('.flag-indicator').length && isFlagged) {
+                if (!isFlaggedPanel && isFlagged && searchName) {
+                    // Find the cell containing the search name by matching content (more reliable than index)
+                    var $searchNameCell = $cells.filter(function() {
+                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩]+/, '').trim();
+                        return cellText === searchName;
+                    }).first();
+
+                    // Fallback to index if content matching fails
+                    if (!$searchNameCell.length && searchNameColIndex >= 0) {
+                        $searchNameCell = $cells.eq(searchNameColIndex);
+                    }
+
+                    if ($searchNameCell.length && !$searchNameCell.find('.flag-indicator').length) {
                         var flagHtml = '<span class="flag-indicator" style="color: #dc4e41; margin-right: 6px; font-size: 12px;" title="Flagged for review">🚩</span>';
                         $searchNameCell.prepend(flagHtml);
                     }
