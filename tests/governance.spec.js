@@ -400,3 +400,70 @@ test.describe('Dashboard Governance', () => {
   });
 
 });
+
+test.describe('Audit History', () => {
+
+  async function loginAndNavigateToAudit(page) {
+    await page.goto(`${process.env.SPLUNK_URL}/en-US/account/login`);
+    await page.fill('input[name="username"]', process.env.SPLUNK_USERNAME || 'admin');
+    await page.fill('input[name="password"]', process.env.SPLUNK_PASSWORD || 'changeme123');
+    await page.click('input[type="submit"]');
+    await page.waitForURL(/.*\/app\/.*/);
+    await page.goto(`${process.env.SPLUNK_URL}/en-US/app/TA-user-governance/audit_history`);
+    await page.waitForSelector('.dashboard-body, .dashboard-view, .dashboard-row', { timeout: 30000 });
+  }
+
+  test('should load audit history page', async ({ page }) => {
+    await loginAndNavigateToAudit(page);
+    await expect(page.locator('.dashboard-row').first()).toBeVisible();
+  });
+
+  test('should display audit summary metrics', async ({ page }) => {
+    await loginAndNavigateToAudit(page);
+    await page.waitForTimeout(3000);
+    await expect(page.getByRole('heading', { name: 'Total Actions (30 Days)', exact: true })).toBeVisible();
+  });
+
+  test('should have filter dropdowns', async ({ page }) => {
+    await loginAndNavigateToAudit(page);
+    await page.waitForTimeout(2000);
+    // Check for filter inputs
+    const dropdowns = page.locator('.input-dropdown, .splunk-dropdown, select');
+    const count = await dropdowns.count();
+    expect(count).toBeGreaterThan(0);
+  });
+
+});
+
+test.describe('Cost Analysis', () => {
+
+  async function loginAndNavigateToCost(page) {
+    await page.goto(`${process.env.SPLUNK_URL}/en-US/account/login`);
+    await page.fill('input[name="username"]', process.env.SPLUNK_USERNAME || 'admin');
+    await page.fill('input[name="password"]', process.env.SPLUNK_PASSWORD || 'changeme123');
+    await page.click('input[type="submit"]');
+    await page.waitForURL(/.*\/app\/.*/);
+    await page.goto(`${process.env.SPLUNK_URL}/en-US/app/TA-user-governance/cost_analysis`);
+    await page.waitForSelector('.dashboard-body, .dashboard-view, .dashboard-row', { timeout: 30000 });
+  }
+
+  test('should load cost analysis page', async ({ page }) => {
+    await loginAndNavigateToCost(page);
+    await expect(page.locator('.dashboard-row').first()).toBeVisible();
+  });
+
+  test('should display cost summary metrics', async ({ page }) => {
+    await loginAndNavigateToCost(page);
+    await page.waitForTimeout(3000);
+    await expect(page.getByRole('heading', { name: 'Total Monthly Cost (Active Searches)', exact: true })).toBeVisible();
+  });
+
+  test('should show cost breakdown charts', async ({ page }) => {
+    await loginAndNavigateToCost(page);
+    await page.waitForTimeout(5000);
+    const charts = page.locator('.viz-chart, .highcharts-container, svg.highcharts-root');
+    const chartCount = await charts.count();
+    expect(chartCount).toBeGreaterThan(0);
+  });
+
+});

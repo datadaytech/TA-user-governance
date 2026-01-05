@@ -1864,10 +1864,16 @@ require([
     // Handle select all checkbox
     $(document).on('click', '.gov-select-all', function(e) {
         e.stopPropagation();
-        var isChecked = this.checked;
-        var $table = $(this).closest('table');
+
+        var $selectAll = $(this);
+        // With appearance:none, manually toggle
+        var wasChecked = $selectAll.prop('checked');
+        var isChecked = !wasChecked;
+        $selectAll.prop('checked', isChecked);
+
+        var $table = $selectAll.closest('table');
         $table.find('.gov-checkbox').each(function() {
-            this.checked = isChecked;
+            $(this).prop('checked', isChecked);
             // Update row visual state
             var $row = $(this).closest('tr');
             if (isChecked) {
@@ -1883,10 +1889,14 @@ require([
     $(document).on('click', '.gov-checkbox', function(e) {
         e.stopPropagation();
 
-        // Toggle the checkbox state explicitly (in case default behavior is blocked)
         var $checkbox = $(this);
-        var isNowChecked = $checkbox.prop('checked');
-        console.log("Checkbox clicked, now checked:", isNowChecked);
+
+        // With appearance:none, the browser doesn't auto-toggle - we must do it manually
+        var wasChecked = $checkbox.prop('checked');
+        var isNowChecked = !wasChecked;
+        $checkbox.prop('checked', isNowChecked);
+
+        console.log("Checkbox clicked, was:", wasChecked, "now:", isNowChecked);
 
         // Update row visual state
         var $row = $checkbox.closest('tr');

@@ -51,7 +51,7 @@
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
 | search isDashboard=1 isVisible=1
-| eval data_len = len(eai:data)
+| eval data_len = len('eai:data')
 | where data_len > 10000
 | stats count</query>
           <earliest>-24h@h</earliest>
@@ -130,7 +130,7 @@
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
 | search isDashboard=1 isVisible=1
 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing
-| eval data_size_kb = round(len(eai:data) / 1024, 1)
+| eval data_size_kb = round(len('eai:data') / 1024, 1)
 | eval complexity = case(
     data_size_kb > 50, "Very High",
     data_size_kb > 25, "High",
@@ -199,7 +199,7 @@
 | search isDashboard=1 isVisible=1
 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing
 | search app=$filter_app$ sharing=$filter_sharing$ owner=$filter_owner$
-| eval data_size_kb = round(len(eai:data) / 1024, 1)
+| eval data_size_kb = round(len('eai:data') / 1024, 1)
 | eval status = case(
     data_size_kb > 50, "Critical",
     data_size_kb > 25, "Warning",
@@ -282,7 +282,7 @@
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
 | search isDashboard=1 isVisible=1
-| eval data_size_kb = round(len(eai:data) / 1024, 1)
+| eval data_size_kb = round(len('eai:data') / 1024, 1)
 | eval size_bucket = case(
     data_size_kb > 50, "50+ KB (Very Large)",
     data_size_kb > 25, "25-50 KB (Large)",
