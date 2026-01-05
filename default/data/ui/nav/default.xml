@@ -1,8 +1,7 @@
 <nav search_view="search" color="#00d4ff">
-  <collection label="Governance">
-    <view name="governance_dashboard" default="true" label="Scheduled Searches" />
-    <view name="dashboard_governance" label="Dashboards" />
-  </collection>
+  <view name="governance_dashboard" default="true" label="Scheduled Search Governance" />
+  <view name="dashboard_governance" label="Dashboard Governance" />
+  <divider />
   <view name="governance_demo" label="Demo Preview" />
   <view name="governance_settings" label="Settings" />
   <divider />

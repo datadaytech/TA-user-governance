@@ -347,3 +347,56 @@ test.describe('View Flagged Searches Button', () => {
   });
 
 });
+
+test.describe('Dashboard Governance', () => {
+
+  async function loginAndNavigate(page) {
+    // Login first
+    await page.goto(`${process.env.SPLUNK_URL}/en-US/account/login`);
+    await page.fill('input[name="username"]', process.env.SPLUNK_USERNAME || 'admin');
+    await page.fill('input[name="password"]', process.env.SPLUNK_PASSWORD || 'changeme123');
+    await page.click('input[type="submit"]');
+    await page.waitForURL(/.*\/app\/.*/);
+
+    // Navigate to dashboard governance
+    await page.goto(`${process.env.SPLUNK_URL}/en-US/app/TA-user-governance/dashboard_governance`);
+    await page.waitForSelector('.dashboard-body, .dashboard-view, .dashboard-row', { timeout: 30000 });
+  }
+
+  test('should load dashboard governance page', async ({ page }) => {
+    await loginAndNavigate(page);
+
+    // Verify page loaded - check for any dashboard content
+    await expect(page.locator('.dashboard-row').first()).toBeVisible();
+  });
+
+  test('should display dashboard metrics panels', async ({ page }) => {
+    await loginAndNavigate(page);
+    await page.waitForTimeout(3000);
+
+    // Verify metric panels exist
+    await expect(page.getByRole('heading', { name: 'Total Dashboards', exact: true })).toBeVisible();
+  });
+
+  test('should display dashboards table', async ({ page }) => {
+    await loginAndNavigate(page);
+    await page.waitForTimeout(5000);
+
+    // Wait for table to have data
+    await page.waitForSelector('table tbody tr', { timeout: 15000 });
+    const rows = page.locator('.dashboard-panel table tbody tr');
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
+  });
+
+  test('should show charts for dashboard distribution', async ({ page }) => {
+    await loginAndNavigate(page);
+    await page.waitForTimeout(5000);
+
+    // Verify charts exist - look for chart containers
+    const charts = page.locator('.viz-chart, .highcharts-container, svg.highcharts-root');
+    const chartCount = await charts.count();
+    expect(chartCount).toBeGreaterThan(0);
+  });
+
+});
