@@ -2,7 +2,95 @@
   <label>Audit History</label>
   <description>Complete audit trail of all governance actions across scheduled searches and dashboards</description>
 
-  <!-- Summary Row -->
+  <!-- Main Audit Log with Inline Filters (TOP) -->
+  <row>
+    <panel>
+      <title>Audit History Log</title>
+      <input type="dropdown" token="filter_type" searchWhenChanged="true">
+        <label>Asset Type</label>
+        <choice value="">All</choice>
+        <choice value="scheduled_search">Scheduled Searches</choice>
+        <choice value="dashboard">Dashboards</choice>
+        <default></default>
+      </input>
+      <input type="dropdown" token="filter_action" searchWhenChanged="true">
+        <label>Action</label>
+        <choice value="*">All Actions</choice>
+        <choice value="flagged">Flagged</choice>
+        <choice value="unflagged">Unflagged / Resolved</choice>
+        <choice value="disabled">Disabled</choice>
+        <choice value="notification_sent">Notification Sent</choice>
+        <choice value="extended">Deadline Extended</choice>
+        <choice value="schedule_changed">Schedule Changed</choice>
+        <default>*</default>
+      </input>
+      <input type="dropdown" token="filter_user" searchWhenChanged="true">
+        <label>Performed By</label>
+        <choice value="*">All Users</choice>
+        <search>
+          <query>| inputlookup governance_audit_log_lookup | stats count by performed_by | fields performed_by</query>
+        </search>
+        <fieldForLabel>performed_by</fieldForLabel>
+        <fieldForValue>performed_by</fieldForValue>
+        <default>*</default>
+      </input>
+      <input type="time" token="time_filter" searchWhenChanged="true">
+        <label>Time Range</label>
+        <default>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </default>
+      </input>
+      <table id="audit_log_table">
+        <search>
+          <query>| inputlookup governance_audit_log_lookup
+| eval asset_type_key = case(
+    match(action, "dashboard"), "dashboard",
+    1=1, "scheduled_search")
+| eval asset_type = case(
+    asset_type_key="dashboard", "Dashboard",
+    1=1, "Scheduled Search")
+| where (asset_type_key="$filter_type$" OR "$filter_type$"="")
+| search action=$filter_action$ performed_by=$filter_user$
+| eval time = strftime(timestamp, "%Y-%m-%d %H:%M:%S")
+| eval action_display = case(
+    action="flagged", "Flagged for Review",
+    action="flagged_dashboard", "Dashboard Flagged",
+    action="unflagged", "Unflagged / Resolved",
+    action="disabled", "Disabled",
+    action="notification_sent", "Notification Sent",
+    action="extended", "Deadline Extended",
+    action="schedule_changed", "Schedule Changed",
+    action="tracked", "Added to Tracking",
+    1=1, action)
+| sort - timestamp
+| table time, action_display, search_name, asset_type, performed_by, details
+| rename time as "Timestamp", action_display as "Action", search_name as "Item Name", asset_type as "Type", performed_by as "Performed By", details as "Details"</query>
+          <earliest>$time_filter.earliest$</earliest>
+          <latest>$time_filter.latest$</latest>
+          <refresh>1m</refresh>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Action">
+          <colorPalette type="map">{"Flagged for Review":#F8BE34,"Dashboard Flagged":#F8BE34,"Notification Sent":#006D9C,"Disabled":#DC4E41,"Unflagged / Resolved":#53A051,"Deadline Extended":#65A637,"Schedule Changed":#00D4FF,"Added to Tracking":#9E72C5}</colorPalette>
+        </format>
+        <format type="color" field="Type">
+          <colorPalette type="map">{"Scheduled Search":#006D9C,"Dashboard":#F8BE34}</colorPalette>
+        </format>
+      </table>
+      <html>
+        <div class="action-buttons" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+          <button class="btn" onclick="window.print()">Print Report</button>
+          <button class="btn btn-primary" onclick="exportAuditLog()">Export to CSV</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Summary Metrics Row -->
   <row>
     <panel>
       <single>
@@ -90,55 +178,6 @@
     </panel>
   </row>
 
-  <!-- Filters Row -->
-  <row>
-    <panel>
-      <title>Filter Audit History</title>
-      <input type="dropdown" token="filter_type" searchWhenChanged="true">
-        <label>Asset Type</label>
-        <choice value="">All Assets</choice>
-        <choice value="scheduled_search">Scheduled Searches</choice>
-        <choice value="dashboard">Dashboards</choice>
-        <default></default>
-      </input>
-      <input type="dropdown" token="filter_action" searchWhenChanged="true">
-        <label>Action Type</label>
-        <choice value="*">All Actions</choice>
-        <choice value="flagged">Flagged</choice>
-        <choice value="unflagged">Unflagged / Resolved</choice>
-        <choice value="disabled">Disabled</choice>
-        <choice value="notification_sent">Notification Sent</choice>
-        <choice value="extended">Deadline Extended</choice>
-        <choice value="schedule_changed">Schedule Changed</choice>
-        <default>*</default>
-      </input>
-      <input type="dropdown" token="filter_user" searchWhenChanged="true">
-        <label>Performed By</label>
-        <choice value="*">All Users</choice>
-        <search>
-          <query>| inputlookup governance_audit_log_lookup | stats count by performed_by | fields performed_by</query>
-        </search>
-        <fieldForLabel>performed_by</fieldForLabel>
-        <fieldForValue>performed_by</fieldForValue>
-        <default>*</default>
-      </input>
-      <input type="time" token="time_filter" searchWhenChanged="true">
-        <label>Time Range</label>
-        <default>
-          <earliest>-30d@d</earliest>
-          <latest>now</latest>
-        </default>
-      </input>
-      <html>
-        <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-top: 10px;">
-          <span style="color: rgba(255,255,255,0.6); font-size: 12px;">
-            Use the filters above to narrow down the audit history. The table below will update automatically.
-          </span>
-        </div>
-      </html>
-    </panel>
-  </row>
-
   <!-- Activity Timeline Chart -->
   <row>
     <panel>
@@ -187,7 +226,7 @@
     </panel>
   </row>
 
-  <!-- Activity by User -->
+  <!-- Activity by User and Items -->
   <row>
     <panel>
       <title>Top Governance Actors</title>
@@ -230,65 +269,6 @@
         <option name="charting.legend.placement">none</option>
         <option name="height">250</option>
       </chart>
-    </panel>
-  </row>
-
-  <!-- Full Audit Log Table -->
-  <row>
-    <panel>
-      <title>Complete Audit Log</title>
-      <table id="audit_log_table">
-        <search>
-          <query>| inputlookup governance_audit_log_lookup
-| eval asset_type_key = case(
-    match(action, "dashboard"), "dashboard",
-    1=1, "scheduled_search")
-| eval asset_type = case(
-    asset_type_key="dashboard", "Dashboard",
-    1=1, "Scheduled Search")
-| where (asset_type_key="$filter_type$" OR "$filter_type$"="")
-| search action=$filter_action$ performed_by=$filter_user$
-| eval time = strftime(timestamp, "%Y-%m-%d %H:%M:%S")
-| eval action_display = case(
-    action="flagged", "Flagged for Review",
-    action="flagged_dashboard", "Dashboard Flagged",
-    action="unflagged", "Unflagged / Resolved",
-    action="disabled", "Disabled",
-    action="notification_sent", "Notification Sent",
-    action="extended", "Deadline Extended",
-    action="schedule_changed", "Schedule Changed",
-    action="tracked", "Added to Tracking",
-    1=1, action)
-| sort - timestamp
-| table time, action_display, search_name, asset_type, performed_by, details
-| rename time as "Timestamp", action_display as "Action", search_name as "Item Name", asset_type as "Type", performed_by as "Performed By", details as "Details"</query>
-          <earliest>$time_filter.earliest$</earliest>
-          <latest>$time_filter.latest$</latest>
-          <refresh>1m</refresh>
-        </search>
-        <option name="count">50</option>
-        <option name="drilldown">none</option>
-        <option name="rowNumbers">true</option>
-        <option name="wrap">true</option>
-        <format type="color" field="Action">
-          <colorPalette type="map">{"Flagged for Review":#F8BE34,"Dashboard Flagged":#F8BE34,"Notification Sent":#006D9C,"Disabled":#DC4E41,"Unflagged / Resolved":#53A051,"Deadline Extended":#65A637,"Schedule Changed":#00D4FF,"Added to Tracking":#9E72C5}</colorPalette>
-        </format>
-        <format type="color" field="Type">
-          <colorPalette type="map">{"Scheduled Search":#006D9C,"Dashboard":#F8BE34}</colorPalette>
-        </format>
-      </table>
-    </panel>
-  </row>
-
-  <!-- Export Options -->
-  <row>
-    <panel>
-      <html>
-        <div class="action-buttons" style="display: flex; justify-content: flex-end; gap: 10px;">
-          <button class="btn" onclick="window.print()">Print Report</button>
-          <button class="btn btn-primary" onclick="exportAuditLog()">Export to CSV</button>
-        </div>
-      </html>
     </panel>
   </row>
 

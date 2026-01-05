@@ -1738,6 +1738,8 @@ require([
             var appColIndex = -1;
             var reasonColIndex = -1;
             var flaggedColIndex = -1;
+            var dashboardColIndex = -1;
+            var isDashboardTable = false;
 
             // Find column indices from headers (before adding our header)
             var headerOffset = 0;
@@ -1745,11 +1747,17 @@ require([
                 var text = $(this).text().trim();
                 if (text === 'Schedule') scheduleColIndex = index;
                 if (text === 'Search Name') searchNameColIndex = index;
+                if (text === 'Dashboard') { dashboardColIndex = index; isDashboardTable = true; }
                 if (text === 'Owner') ownerColIndex = index;
                 if (text === 'App') appColIndex = index;
                 if (text === 'Reason') reasonColIndex = index;
                 if (text === 'Flagged') flaggedColIndex = index;
             });
+
+            // Use Dashboard column as search name for dashboard tables
+            if (isDashboardTable && dashboardColIndex >= 0) {
+                searchNameColIndex = dashboardColIndex;
+            }
 
             // Add checkbox header if not present
             var $thead = $table.find('thead tr').first();
