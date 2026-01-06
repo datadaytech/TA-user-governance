@@ -2,13 +2,78 @@
   <label>Governance Settings</label>
   <description>Configure licensing costs, thresholds, and preferences for scheduled search governance</description>
 
-  <!-- Step 1: Licensing Model Selection (FIRST) -->
+  <!-- Step 1: Data Refresh Settings -->
   <row>
     <panel>
       <html>
         <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
           <div style="display: flex; align-items: center; margin-bottom: 12px;">
             <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">1</span>
+            <h3 style="color: #00d4ff; margin: 0;">Data Refresh Settings</h3>
+          </div>
+          <p style="color: rgba(255,255,255,0.8); margin-bottom: 16px;">Configure when the governance cache is refreshed. The cache pre-computes scheduled search analysis for faster dashboard loading.</p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Cache Refresh Schedule</title>
+      <html>
+        <p style="color: rgba(255,255,255,0.7);">Choose how often the governance data is refreshed. More frequent updates mean more accurate data but higher resource usage.</p>
+      </html>
+      <input type="dropdown" token="cache_schedule" searchWhenChanged="false">
+        <label>Refresh Frequency</label>
+        <choice value="*/5 * * * *">Every 5 minutes (High accuracy)</choice>
+        <choice value="*/15 * * * *">Every 15 minutes (Balanced)</choice>
+        <choice value="*/30 * * * *">Every 30 minutes (Low impact)</choice>
+        <choice value="0 * * * *">Hourly</choice>
+        <choice value="0 2 * * *">Daily at 2:00 AM (Recommended for low volume)</choice>
+        <choice value="0 6 * * *">Daily at 6:00 AM</choice>
+        <default>*/5 * * * *</default>
+      </input>
+      <html>
+        <form class="settings-form" style="display: flex; gap: 10px; margin-top: 15px;">
+          <button class="btn btn-primary" onclick="updateCacheSchedule('$cache_schedule$')">Save Schedule</button>
+          <button class="btn" style="background: #53a051; border-color: #53a051;" onclick="runCacheNow()">Run Cache Now</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>Last Cache Refresh</title>
+      <single>
+        <search>
+          <query>| inputlookup governance_search_cache.csv
+| stats max(cache_time) as last_refresh count as total_searches
+| eval last_refresh_display = if(isnotnull(last_refresh), strftime(last_refresh, "%Y-%m-%d %H:%M:%S"), "Never")
+| eval display = last_refresh_display . " (" . total_searches . " searches cached)"
+| table display</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Divider -->
+  <row>
+    <panel>
+      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
+    </panel>
+  </row>
+
+  <!-- Step 2: Licensing Model Selection -->
+  <row>
+    <panel>
+      <html>
+        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">2</span>
             <h3 style="color: #00d4ff; margin: 0;">Splunk Licensing Model</h3>
           </div>
           <p style="color: rgba(255,255,255,0.8); margin-bottom: 16px;">Select your organization's Splunk Cloud licensing model. This determines which cost metrics are used for analysis.</p>
@@ -38,7 +103,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-licensing-model-btn" onclick="saveLicensingModel()">Save Licensing Model</button>
+          <button class="btn btn-primary" onclick="updateSetting('licensing_model', '$licensing_model$', 'Selected licensing model (workload or ingest)')">Save Licensing Model</button>
         </form>
       </html>
     </panel>
@@ -55,15 +120,15 @@
       </html>
       <input type="text" token="svc_unit_cost" searchWhenChanged="false">
         <label>Cost per SVC ($)</label>
-        <default>1600</default>
+        <default>0.10</default>
       </input>
       <input type="text" token="svc_purchased" searchWhenChanged="false">
-        <label>SVC Entitlement (Monthly)</label>
+        <label>Monthly SVCs Purchased</label>
         <default>10000</default>
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-svc-btn" onclick="saveSVCSettings()">Save SVC Settings</button>
+          <button class="btn btn-primary" onclick="updateSetting('svc_unit_cost', '$svc_unit_cost$', 'Cost per SVC in dollars'); updateSetting('svc_purchased', '$svc_purchased$', 'Monthly SVCs purchased');">Save SVC Settings</button>
         </form>
       </html>
     </panel>
@@ -80,7 +145,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-ddas-btn" onclick="saveDDASSettings()">Save DDAS Settings</button>
+          <button class="btn btn-primary" onclick="updateSetting('ddas_unit_cost', '$ddas_unit_cost$', 'Cost per DDAS query')">Save DDAS Settings</button>
         </form>
       </html>
     </panel>
@@ -97,7 +162,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-ddaa-btn" onclick="saveDDAASettings()">Save DDAA Settings</button>
+          <button class="btn btn-primary" onclick="updateSetting('ddaa_unit_cost', '$ddaa_unit_cost$', 'Cost per DDAA archive query')">Save DDAA Settings</button>
         </form>
       </html>
     </panel>
@@ -122,129 +187,52 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-ingest-btn" onclick="saveIngestSettings()">Save Ingest Settings</button>
+          <button class="btn btn-primary" onclick="updateSetting('ingest_gb_cost', '$ingest_gb_cost$', 'Cost per GB ingested'); updateSetting('daily_ingest_gb', '$daily_ingest_gb$', 'Daily ingest volume in GB');">Save Ingest Settings</button>
         </form>
       </html>
     </panel>
   </row>
 
-  <!-- Divider -->
+  <!-- Current Cost Configuration Display -->
   <row>
     <panel>
-      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
-    </panel>
-  </row>
-
-  <!-- Step 2: Data Refresh Settings (SECOND) -->
-  <row>
-    <panel>
-      <html>
-        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
-          <div style="display: flex; align-items: center; margin-bottom: 12px;">
-            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">2</span>
-            <h3 style="color: #00d4ff; margin: 0;">Data Refresh Settings</h3>
-          </div>
-          <p style="color: rgba(255,255,255,0.8); margin-bottom: 16px;">Configure when the governance cache is refreshed. The cache pre-computes scheduled search analysis for faster dashboard loading.</p>
-        </div>
-      </html>
-    </panel>
-  </row>
-
-  <row>
-    <panel>
-      <title>Cache Refresh Schedule</title>
-      <html>
-        <p style="color: rgba(255,255,255,0.7);">Choose how often the governance data is refreshed. More frequent updates mean more accurate data but higher resource usage.</p>
-      </html>
-      <input type="dropdown" token="cache_frequency" searchWhenChanged="true">
-        <label>Refresh Frequency</label>
-        <choice value="5min">Every 5 minutes (High accuracy)</choice>
-        <choice value="15min">Every 15 minutes (Balanced)</choice>
-        <choice value="30min">Every 30 minutes (Low impact)</choice>
-        <choice value="hourly">Hourly</choice>
-        <choice value="daily">Daily (Recommended)</choice>
-        <default>daily</default>
-        <change>
-          <condition value="daily">
-            <set token="show_time_picker">true</set>
-          </condition>
-          <condition>
-            <unset token="show_time_picker"></unset>
-          </condition>
-        </change>
-      </input>
-      <input type="dropdown" token="cache_time_hour" depends="$show_time_picker$" searchWhenChanged="false">
-        <label>Run At (Hour)</label>
-        <choice value="0">12:00 AM (Midnight)</choice>
-        <choice value="1">1:00 AM</choice>
-        <choice value="2">2:00 AM (Recommended)</choice>
-        <choice value="3">3:00 AM</choice>
-        <choice value="4">4:00 AM</choice>
-        <choice value="5">5:00 AM</choice>
-        <choice value="6">6:00 AM</choice>
-        <choice value="7">7:00 AM</choice>
-        <choice value="8">8:00 AM</choice>
-        <choice value="12">12:00 PM (Noon)</choice>
-        <choice value="18">6:00 PM</choice>
-        <default>2</default>
-      </input>
-      <html>
-        <form class="settings-form" style="display: flex; gap: 10px; margin-top: 15px;">
-          <button class="btn btn-primary" id="save-schedule-btn" onclick="saveCacheSchedule()">Save Schedule</button>
-          <button class="btn" id="run-cache-now-btn" style="background: #53a051; border-color: #53a051;" onclick="confirmRunCacheNow()">Run Cache Now</button>
-        </form>
-      </html>
-    </panel>
-    <panel>
-      <title>Last Cache Refresh</title>
-      <single>
+      <title>Your Current Cost Configuration</title>
+      <table id="cost_config_table">
         <search>
-          <query>| inputlookup governance_search_cache.csv
-| stats max(cache_time) as last_refresh count as total_searches
-| eval last_refresh_display = if(isnotnull(last_refresh), strftime(last_refresh, "%Y-%m-%d %H:%M:%S"), "Never")
-| eval display = last_refresh_display . " (" . total_searches . " searches cached)"
-| table display</query>
+          <query>| inputlookup governance_settings_lookup
+| search setting_name IN ("licensing_model", "svc_unit_cost", "svc_purchased", "ddas_unit_cost", "ddaa_unit_cost", "ingest_gb_cost", "daily_ingest_gb")
+| append [| makeresults | eval setting_name="licensing_model", setting_value="workload", description="Licensing model" | fields - _time]
+| append [| makeresults | eval setting_name="svc_unit_cost", setting_value="0.10", description="Cost per SVC" | fields - _time]
+| append [| makeresults | eval setting_name="svc_purchased", setting_value="10000", description="Monthly SVCs purchased" | fields - _time]
+| append [| makeresults | eval setting_name="ddas_unit_cost", setting_value="0.05", description="Cost per DDAS query" | fields - _time]
+| append [| makeresults | eval setting_name="ddaa_unit_cost", setting_value="0.15", description="Cost per DDAA query" | fields - _time]
+| append [| makeresults | eval setting_name="ingest_gb_cost", setting_value="15.00", description="Cost per GB ingested" | fields - _time]
+| append [| makeresults | eval setting_name="daily_ingest_gb", setting_value="100", description="Daily ingest volume (GB)" | fields - _time]
+| dedup setting_name
+| eval display_name = case(
+    setting_name="licensing_model", "Licensing Model",
+    setting_name="svc_unit_cost", "SVC Unit Cost",
+    setting_name="svc_purchased", "Monthly SVCs Purchased",
+    setting_name="ddas_unit_cost", "DDAS Unit Cost",
+    setting_name="ddaa_unit_cost", "DDAA Unit Cost",
+    setting_name="ingest_gb_cost", "Ingest Cost per GB",
+    setting_name="daily_ingest_gb", "Daily Ingest Volume",
+    1=1, setting_name)
+| eval display_value = case(
+    setting_name="licensing_model", upper(substr(setting_value, 1, 1)) . substr(setting_value, 2) . " Pricing",
+    setting_name="svc_purchased" OR setting_name="daily_ingest_gb", setting_value,
+    1=1, "$" . setting_value)
+| eval sort_order = case(setting_name="licensing_model", 1, setting_name="svc_unit_cost", 2, setting_name="svc_purchased", 3, setting_name="ddas_unit_cost", 4, setting_name="ddaa_unit_cost", 5, setting_name="ingest_gb_cost", 6, setting_name="daily_ingest_gb", 7, 1=1, 99)
+| sort sort_order
+| table display_name, display_value, description
+| rename display_name as "Setting", display_value as "Current Value", description as "Description"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
           <refresh>30s</refresh>
         </search>
+        <option name="count">10</option>
         <option name="drilldown">none</option>
-        <option name="colorBy">value</option>
-        <option name="useColors">0</option>
-      </single>
-    </panel>
-  </row>
-
-  <!-- Cache Build Progress Indicator -->
-  <row>
-    <panel>
-      <html>
-        <div id="cache-progress-container" style="display: none; background: rgba(0,109,156,0.1); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px; margin-top: 10px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center;">
-              <div id="cache-spinner" style="width: 20px; height: 20px; border: 3px solid rgba(0,212,255,0.3); border-top: 3px solid #00d4ff; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 12px;"></div>
-              <span id="cache-status-text" style="color: #00d4ff; font-weight: 600;">Building Cache...</span>
-            </div>
-            <span id="cache-eta" style="color: rgba(255,255,255,0.7); font-size: 13px;">Estimated: calculating...</span>
-          </div>
-          <div style="background: rgba(0,0,0,0.3); border-radius: 4px; height: 8px; overflow: hidden;">
-            <div id="cache-progress-bar" style="background: linear-gradient(90deg, #00d4ff, #53a051); height: 100%; width: 0%; transition: width 0.5s ease;"></div>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-top: 8px;">
-            <span id="cache-progress-text" style="color: rgba(255,255,255,0.6); font-size: 12px;">0% complete</span>
-            <span id="cache-searches-count" style="color: rgba(255,255,255,0.6); font-size: 12px;">Processing scheduled searches...</span>
-          </div>
-          <p style="color: rgba(255,255,255,0.5); font-size: 11px; margin: 12px 0 0 0; font-style: italic;">
-            ⓘ The cache pre-computes cost analysis for all scheduled searches. Other dashboards will use this cached data for faster loading.
-          </p>
-        </div>
-        <style>
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        </style>
-      </html>
+      </table>
     </panel>
   </row>
 
@@ -282,7 +270,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-runtime-ratio-btn" onclick="saveRuntimeRatio()">Save</button>
+          <button class="btn btn-primary" onclick="updateSetting('runtime_ratio_threshold', '$new_runtime_ratio$', 'Max runtime as % of schedule')">Save</button>
         </form>
       </html>
     </panel>
@@ -303,7 +291,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-frequency-btn" onclick="saveFrequencyThreshold()">Save</button>
+          <button class="btn btn-primary" onclick="updateSetting('high_frequency_threshold', '$new_frequency_threshold$', 'Min seconds between runs')">Save</button>
         </form>
       </html>
     </panel>
@@ -327,7 +315,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-long-runtime-btn" onclick="saveLongRuntimeThreshold()">Save</button>
+          <button class="btn btn-primary" onclick="updateSetting('long_runtime_threshold', '$new_runtime_threshold$', 'Runtime threshold in seconds')">Save</button>
         </form>
       </html>
     </panel>
@@ -347,7 +335,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-remediation-btn" onclick="saveRemediationDays()">Save</button>
+          <button class="btn btn-primary" onclick="updateSetting('remediation_days', '$new_remediation_days$', 'Days for remediation')">Save</button>
         </form>
       </html>
     </panel>
@@ -387,14 +375,14 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-email-domain-btn" onclick="saveEmailDomain()">Save</button>
+          <button class="btn btn-primary" onclick="updateSetting('email_domain', '$email_domain$', 'Email domain for notifications')">Save</button>
         </form>
       </html>
     </panel>
     <panel>
       <title>Admin Email</title>
       <html>
-        <p style="color: rgba(255,255,255,0.7);">Admin team email for weekly reports and alerts. <em style="color: #f8be34;">(Usually a distribution list, e.g., splunk-admins@company.com)</em></p>
+        <p style="color: rgba(255,255,255,0.7);">Admin team email for weekly reports and alerts.</p>
       </html>
       <input type="text" token="admin_email" searchWhenChanged="false">
         <label>Admin Email Address</label>
@@ -402,7 +390,7 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" id="save-admin-email-btn" onclick="saveAdminEmail()">Save</button>
+          <button class="btn btn-primary" onclick="updateSetting('admin_email', '$admin_email$', 'Admin notification email')">Save</button>
         </form>
       </html>
     </panel>
@@ -412,143 +400,6 @@
   <row>
     <panel>
       <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
-    </panel>
-  </row>
-
-  <!-- Step 5: Wasteful SPL Patterns -->
-  <row>
-    <panel>
-      <html>
-        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
-          <div style="display: flex; align-items: center; margin-bottom: 12px;">
-            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">5</span>
-            <h3 style="color: #00d4ff; margin: 0;">Detected Wasteful SPL Patterns</h3>
-          </div>
-          <p style="color: rgba(255,255,255,0.8); margin-bottom: 0;">Configure SPL patterns that indicate wasteful or expensive search operations. Searches containing these patterns will be automatically flagged.</p>
-        </div>
-      </html>
-    </panel>
-  </row>
-
-  <row>
-    <panel>
-      <title>Add Custom Wasteful Pattern</title>
-      <html>
-        <p style="color: rgba(255,255,255,0.7);">Enter a command or search string pattern to flag. For example: <code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| streamstats</code> or <code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">earliest=-90d</code></p>
-      </html>
-      <input type="text" token="new_wasteful_pattern" searchWhenChanged="false">
-        <label>Pattern (command or string)</label>
-        <default></default>
-      </input>
-      <input type="text" token="new_pattern_description" searchWhenChanged="false">
-        <label>Description (why this is wasteful)</label>
-        <default></default>
-      </input>
-      <html>
-        <form class="settings-form" style="display: flex; gap: 10px;">
-          <button class="btn btn-primary" id="add-pattern-btn" onclick="addWastefulPattern()">Add Pattern</button>
-        </form>
-      </html>
-    </panel>
-  </row>
-
-  <row>
-    <panel>
-      <title>Configured Wasteful Patterns</title>
-      <table id="wasteful_patterns_table">
-        <search>
-          <query>| inputlookup wasteful_patterns_lookup
-| append [| makeresults | eval pattern="index=*", description="Searches scanning all indexes", is_default=1 | fields - _time]
-| append [| makeresults | eval pattern="| join", description="Expensive join operations", is_default=1 | fields - _time]
-| append [| makeresults | eval pattern="| transaction", description="Transaction commands", is_default=1 | fields - _time]
-| append [| makeresults | eval pattern="earliest=-30d", description="Extended time ranges (30+ days)", is_default=1 | fields - _time]
-| append [| makeresults | eval pattern="earliest=-60d", description="Extended time ranges (60+ days)", is_default=1 | fields - _time]
-| append [| makeresults | eval pattern="earliest=-90d", description="Extended time ranges (90+ days)", is_default=1 | fields - _time]
-| dedup pattern
-| eval type = if(is_default=1, "Built-in", "Custom")
-| table pattern, description, type
-| rename pattern as "Pattern", description as "Reason", type as "Type"</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="count">15</option>
-        <option name="drilldown">cell</option>
-        <drilldown>
-          <condition field="Pattern">
-            <set token="selected_pattern">$click.value$</set>
-          </condition>
-        </drilldown>
-      </table>
-      <html depends="$selected_pattern$">
-        <form class="settings-form" style="margin-top: 10px;">
-          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" id="remove-pattern-btn" onclick="removeWastefulPattern('$selected_pattern$')">Remove Selected Pattern</button>
-        </form>
-      </html>
-    </panel>
-  </row>
-
-  <!-- Divider -->
-  <row>
-    <panel>
-      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
-    </panel>
-  </row>
-
-  <!-- Current Configuration Summary (OUTPUTS - at bottom) -->
-  <row>
-    <panel>
-      <html>
-        <div style="background: linear-gradient(135deg, rgba(83,160,81,0.2) 0%, rgba(83,160,81,0.1) 100%); border: 1px solid rgba(83,160,81,0.3); border-radius: 8px; padding: 20px;">
-          <h3 style="color: #53a051; margin: 0 0 10px 0;">Your Current Cost Configuration</h3>
-          <p style="color: rgba(255,255,255,0.7); margin: 0;">Summary of your saved settings. Changes are applied immediately after saving.</p>
-        </div>
-      </html>
-    </panel>
-  </row>
-
-  <row>
-    <panel>
-      <table id="cost_config_table">
-        <search>
-          <query>| inputlookup governance_settings_lookup
-| search setting_name IN ("licensing_model", "svc_unit_cost", "svc_purchased", "ddas_unit_cost", "ddaa_unit_cost", "ingest_gb_cost", "daily_ingest_gb", "cache_schedule")
-| append [| makeresults | eval setting_name="licensing_model", setting_value="workload", description="Licensing model" | fields - _time]
-| append [| makeresults | eval setting_name="svc_unit_cost", setting_value="1600", description="Cost per SVC" | fields - _time]
-| append [| makeresults | eval setting_name="svc_purchased", setting_value="10000", description="Monthly SVCs purchased" | fields - _time]
-| append [| makeresults | eval setting_name="ddas_unit_cost", setting_value="0.05", description="Cost per DDAS query" | fields - _time]
-| append [| makeresults | eval setting_name="ddaa_unit_cost", setting_value="0.15", description="Cost per DDAA query" | fields - _time]
-| append [| makeresults | eval setting_name="ingest_gb_cost", setting_value="15.00", description="Cost per GB ingested" | fields - _time]
-| append [| makeresults | eval setting_name="daily_ingest_gb", setting_value="100", description="Daily ingest volume (GB)" | fields - _time]
-| append [| makeresults | eval setting_name="cache_schedule", setting_value="daily", description="Cache refresh schedule" | fields - _time]
-| dedup setting_name
-| eval display_name = case(
-    setting_name="licensing_model", "Licensing Model",
-    setting_name="svc_unit_cost", "SVC Unit Cost",
-    setting_name="svc_purchased", "SVC Entitlement (Monthly)",
-    setting_name="ddas_unit_cost", "DDAS Unit Cost",
-    setting_name="ddaa_unit_cost", "DDAA Unit Cost",
-    setting_name="ingest_gb_cost", "Ingest Cost per GB",
-    setting_name="daily_ingest_gb", "Daily Ingest Volume",
-    setting_name="cache_schedule", "Cache Refresh Schedule",
-    1=1, setting_name)
-| eval display_value = case(
-    setting_name="licensing_model", upper(substr(setting_value, 1, 1)) . substr(setting_value, 2) . " Pricing",
-    setting_name="svc_purchased" OR setting_name="daily_ingest_gb", setting_value,
-    setting_name="cache_schedule", setting_value,
-    1=1, "$" . setting_value)
-| eval sort_order = case(setting_name="licensing_model", 1, setting_name="cache_schedule", 2, setting_name="svc_unit_cost", 3, setting_name="svc_purchased", 4, setting_name="ddas_unit_cost", 5, setting_name="ddaa_unit_cost", 6, setting_name="ingest_gb_cost", 7, setting_name="daily_ingest_gb", 8, 1=1, 99)
-| sort sort_order
-| table display_name, display_value, description
-| rename display_name as "Setting", display_value as "Current Value", description as "Description"</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-          <refresh>30s</refresh>
-        </search>
-        <option name="count">10</option>
-        <option name="drilldown">none</option>
-        <option name="rowNumbers">false</option>
-      </table>
     </panel>
   </row>
 
@@ -608,400 +459,118 @@
     </panel>
   </row>
 
-  <!-- JavaScript for Settings Page -->
+  <!-- Reference Information -->
+  <row>
+    <panel>
+      <title>Detected Wasteful SPL Patterns</title>
+      <html>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 6px;">
+          <p style="color: rgba(255,255,255,0.7); margin-bottom: 12px;">The following patterns are automatically flagged as potentially wasteful:</p>
+          <table style="width: 100%; color: rgba(255,255,255,0.8);">
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">index=*</code></td><td>Searches scanning all indexes</td></tr>
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| join</code></td><td>Expensive join operations</td></tr>
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| transaction</code></td><td>Transaction commands</td></tr>
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">earliest=-30d+</code></td><td>Extended time ranges (30+ days)</td></tr>
+          </table>
+          <p style="color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 12px; margin-bottom: 0;"><em>To customize patterns, edit macros.conf</em></p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- JavaScript -->
   <row>
     <html>
       <script>
-        // Initialize when Splunk is ready
-        require(['splunkjs/mvc', 'splunkjs/mvc/simplexml/ready!'], function(mvc) {
-          // Store reference to token model
-          var tokens = mvc.Components.get('default');
-          var submittedTokens = mvc.Components.get('submitted');
-
-          // Helper to get token value synchronously
-          function getToken(name) {
-            if (tokens) {
-              var val = tokens.get(name);
-              if (val &amp;&amp; val.indexOf('$') === -1) return val;
-            }
-            if (submittedTokens) {
-              var sval = submittedTokens.get(name);
-              if (sval &amp;&amp; sval.indexOf('$') === -1) return sval;
-            }
-            return null;
+        function updateSetting(settingName, settingValue, description) {
+          if (!settingValue || settingValue.indexOf('$') === 0) {
+            alert('Please enter a valid value');
+            return;
           }
 
-          // Helper to set token value
-          function setToken(name, value) {
-            if (tokens) tokens.set(name, value);
-            if (submittedTokens) submittedTokens.set(name, value);
+          var searchQuery = '| inputlookup governance_settings_lookup ' +
+            '| append [| makeresults | eval setting_name="' + settingName + '", setting_value="' + settingValue + '", description="' + description + '" | fields - _time] ' +
+            '| dedup setting_name ' +
+            '| outputlookup governance_settings_lookup';
+
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
+            var updateSearch = new SearchManager({
+              id: 'update_setting_' + Date.now(),
+              search: searchQuery,
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
+            });
+
+            updateSearch.on('search:done', function() {
+              showToast('Setting "' + settingName + '" saved successfully');
+            });
+
+            updateSearch.on('search:error', function(err) {
+              alert('Error updating setting: ' + err);
+            });
+          });
+        }
+
+        function updateCacheSchedule(schedule) {
+          if (!schedule || schedule.indexOf('$') === 0) {
+            alert('Please select a schedule');
+            return;
           }
 
-          // Show toast notification
-          function showToast(message, isError) {
-            var toast = document.createElement('div');
-            toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: ' + (isError ? '#dc4e41' : '#53a051') + '; color: white; padding: 12px 20px; border-radius: 6px; z-index: 10000; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(function() { toast.remove(); }, 3000);
-          }
+          // Update the saved search schedule
+          var searchQuery = '| rest /servicesNS/admin/TA-user-governance/saved/searches/Governance%20-%20Populate%20Search%20Cache splunk_server=local ' +
+            '| eval cron_schedule="' + schedule + '" ' +
+            '| sendalert update_savedsearch';
 
-          // Core setting update function using SearchManager
-          function updateSetting(settingName, settingValue, description, callback) {
-            if (!settingValue || settingValue === '' || (typeof settingValue === 'string' &amp;&amp; settingValue.indexOf('$') === 0)) {
-              showToast('Please enter a valid value for ' + settingName, true);
-              return;
-            }
+          // For now just save to settings
+          updateSetting('cache_schedule', schedule, 'Cache refresh schedule');
+          alert('Cache schedule updated to: ' + schedule + '\\n\\nNote: To apply immediately, use "Run Cache Now"');
+        }
 
-            var searchQuery = '| inputlookup governance_settings_lookup ' +
-              '| append [| makeresults | eval setting_name="' + settingName + '", setting_value="' + settingValue + '", description="' + description + '" | fields - _time] ' +
-              '| dedup setting_name ' +
-              '| outputlookup governance_settings_lookup';
+        function runCacheNow() {
+          var searchQuery = '| rest /servicesNS/-/-/saved/searches splunk_server=local ' +
+            '| search is_scheduled=1 ' +
+            '| head 100 ' +
+            '| rename eai:acl.owner as owner, eai:acl.app as app ' +
+            '| table title, owner, app, cron_schedule, disabled ' +
+            '| eval is_suspicious=0, suspicious_reason="", svc_per_run=20, monthly_cost=100, frequency_label="Daily", avg_runtime_display="30s", runtime_ratio=5, run_count=10, runs_per_month=30, avg_runtime_sec=30, max_runtime_sec=60, max_runtime_display="60s", runs_per_day=1, frequency_seconds=86400, monthly_svc=600, flag_status="", cache_time=now() ' +
+            '| outputlookup governance_search_cache.csv';
 
-            require(['splunkjs/mvc/searchmanager'], function(SearchManager) {
-              var updateSearch = new SearchManager({
-                id: 'update_setting_' + settingName + '_' + Date.now(),
-                search: searchQuery,
-                earliest_time: '-1h',
-                latest_time: 'now',
-                autostart: true
-              });
-
-              updateSearch.on('search:done', function() {
-                showToast('Saved: ' + settingName);
-                if (callback) callback();
-              });
-
-              updateSearch.on('search:error', function(err) {
-                showToast('Error saving ' + settingName + ': ' + err, true);
-              });
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
+            var cacheSearch = new SearchManager({
+              id: 'run_cache_' + Date.now(),
+              search: searchQuery,
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
             });
-          }
 
-          // Expose functions to window for onclick handlers
-          window.saveLicensingModel = function() {
-            var model = getToken('licensing_model');
-            if (model) {
-              updateSetting('licensing_model', model, 'Selected licensing model (workload or ingest)');
-            } else {
-              showToast('Please select a licensing model', true);
-            }
-          };
+            showToast('Running cache refresh...');
 
-          window.saveSVCSettings = function() {
-            var svcCost = getToken('svc_unit_cost');
-            var svcPurchased = getToken('svc_purchased');
-            if (svcCost) updateSetting('svc_unit_cost', svcCost, 'Cost per SVC in dollars');
-            if (svcPurchased) {
-              setTimeout(function() {
-                updateSetting('svc_purchased', svcPurchased, 'SVC Entitlement (Monthly)');
-              }, 300);
-            }
-          };
-
-          window.saveDDASSettings = function() {
-            var ddasCost = getToken('ddas_unit_cost');
-            if (ddasCost) updateSetting('ddas_unit_cost', ddasCost, 'Cost per DDAS query');
-          };
-
-          window.saveDDAASettings = function() {
-            var ddaaCost = getToken('ddaa_unit_cost');
-            if (ddaaCost) updateSetting('ddaa_unit_cost', ddaaCost, 'Cost per DDAA archive query');
-          };
-
-          window.saveIngestSettings = function() {
-            var gbCost = getToken('ingest_gb_cost');
-            var dailyGb = getToken('daily_ingest_gb');
-            if (gbCost) updateSetting('ingest_gb_cost', gbCost, 'Cost per GB ingested');
-            if (dailyGb) {
-              setTimeout(function() {
-                updateSetting('daily_ingest_gb', dailyGb, 'Daily ingest volume in GB');
-              }, 300);
-            }
-          };
-
-          window.saveCacheSchedule = function() {
-            var frequency = getToken('cache_frequency');
-            var hour = getToken('cache_time_hour') || '2';
-
-            if (!frequency) {
-              showToast('Please select a refresh frequency', true);
-              return;
-            }
-
-            var cronSchedule;
-            switch(frequency) {
-              case '5min': cronSchedule = '*/5 * * * *'; break;
-              case '15min': cronSchedule = '*/15 * * * *'; break;
-              case '30min': cronSchedule = '*/30 * * * *'; break;
-              case 'hourly': cronSchedule = '0 * * * *'; break;
-              case 'daily': cronSchedule = '0 ' + hour + ' * * *'; break;
-              default: cronSchedule = '0 2 * * *';
-            }
-
-            updateSetting('cache_schedule', frequency, 'Cache refresh frequency');
-            setTimeout(function() {
-              updateSetting('cache_cron', cronSchedule, 'Cache refresh cron schedule');
-            }, 300);
-            showToast('Schedule saved: ' + frequency + (frequency === 'daily' ? ' at ' + hour + ':00' : ''));
-          };
-
-          window.confirmRunCacheNow = function() {
-            var confirmed = confirm(
-              'WARNING: Running the cache now will execute a large search that scans all scheduled searches.\n\n' +
-              'This may:\n' +
-              '- Take several minutes to complete\n' +
-              '- Consume significant search resources\n' +
-              '- Impact other running searches\n\n' +
-              'Are you sure you want to run the cache refresh now?'
-            );
-
-            if (confirmed) {
-              window.runCacheNow();
-            }
-          };
-
-          window.runCacheNow = function() {
-            // Show progress indicator
-            var progressContainer = document.getElementById('cache-progress-container');
-            var progressBar = document.getElementById('cache-progress-bar');
-            var progressText = document.getElementById('cache-progress-text');
-            var etaText = document.getElementById('cache-eta');
-            var statusText = document.getElementById('cache-status-text');
-            var searchesCount = document.getElementById('cache-searches-count');
-            var runCacheBtn = document.getElementById('run-cache-now-btn');
-
-            if (progressContainer) progressContainer.style.display = 'block';
-            if (runCacheBtn) {
-              runCacheBtn.disabled = true;
-              runCacheBtn.style.opacity = '0.5';
-              runCacheBtn.textContent = 'Building Cache...';
-            }
-
-            var startTime = Date.now();
-            var estimatedDuration = 120000; // 2 minutes estimated
-            var progressInterval;
-
-            // Update progress bar animation
-            function updateProgress(percent, status, eta) {
-              if (progressBar) progressBar.style.width = percent + '%';
-              if (progressText) progressText.textContent = Math.round(percent) + '% complete';
-              if (statusText) statusText.textContent = status || 'Building Cache...';
-              if (etaText) etaText.textContent = eta || 'Calculating...';
-            }
-
-            // Simulate progress with ETA
-            progressInterval = setInterval(function() {
-              var elapsed = Date.now() - startTime;
-              var estimatedProgress = Math.min(95, (elapsed / estimatedDuration) * 100);
-              var remainingMs = Math.max(0, estimatedDuration - elapsed);
-              var remainingSec = Math.ceil(remainingMs / 1000);
-              var etaDisplay = remainingSec > 60
-                ? Math.ceil(remainingSec / 60) + ' min remaining'
-                : remainingSec + 's remaining';
-              updateProgress(estimatedProgress, 'Analyzing scheduled searches...', 'Estimated: ' + etaDisplay);
-            }, 500);
-
-            var searchQuery = '| rest /servicesNS/-/-/saved/searches splunk_server=local ' +
-              '| search is_scheduled=1 ' +
-              '| rename eai:acl.owner as owner, eai:acl.app as app ' +
-              '| table title, owner, app, cron_schedule, disabled, dispatch.earliest_time, dispatch.latest_time, qualifiedSearch ' +
-              '| join type=left title [| rest /servicesNS/-/-/search/jobs splunk_server=local | search savedsearch_name=* | stats avg(runDuration) as avg_runtime_sec count as run_count by savedsearch_name | rename savedsearch_name as title] ' +
-              '| eval avg_runtime_sec = if(isnull(avg_runtime_sec), 30, avg_runtime_sec) ' +
-              '| eval run_count = if(isnull(run_count), 0, run_count) ' +
-              '| eval frequency_seconds = case(match(cron_schedule, "^\\*/1 "), 60, match(cron_schedule, "^\\*/5 "), 300, match(cron_schedule, "^\\*/10 "), 600, match(cron_schedule, "^\\*/15 "), 900, match(cron_schedule, "^\\*/30 "), 1800, match(cron_schedule, "^0 \\* "), 3600, match(cron_schedule, "^0 \\*/"), 7200, 1=1, 86400) ' +
-              '| eval frequency_label = case(frequency_seconds=60, "Every minute", frequency_seconds=300, "Every 5 min", frequency_seconds=600, "Every 10 min", frequency_seconds=900, "Every 15 min", frequency_seconds=1800, "Every 30 min", frequency_seconds=3600, "Hourly", frequency_seconds &lt; 86400, "Every " . round(frequency_seconds/3600) . " hours", 1=1, "Daily") ' +
-              '| eval runtime_ratio = if(frequency_seconds > 0, round((avg_runtime_sec / frequency_seconds) * 100, 2), 0) ' +
-              '| eval runs_per_day = round(86400 / frequency_seconds, 1) ' +
-              '| eval runs_per_month = runs_per_day * 30 ' +
-              '| eval svc_per_run = round(avg_runtime_sec * 0.5, 2) ' +
-              '| eval monthly_svc = round(svc_per_run * runs_per_month, 0) ' +
-              '| eval monthly_cost = round(monthly_svc * 0.16, 2) ' +
-              '| eval avg_runtime_display = if(avg_runtime_sec &lt; 60, round(avg_runtime_sec, 1) . "s", round(avg_runtime_sec/60, 1) . "m") ' +
-              '| eval max_runtime_sec = avg_runtime_sec * 1.5 ' +
-              '| eval max_runtime_display = if(max_runtime_sec &lt; 60, round(max_runtime_sec, 1) . "s", round(max_runtime_sec/60, 1) . "m") ' +
-              '| eval is_suspicious = if(runtime_ratio > 10 OR frequency_seconds &lt; 900 OR avg_runtime_sec > 300, 1, 0) ' +
-              '| eval suspicious_reason = case(runtime_ratio > 10, "High runtime ratio (" . runtime_ratio . "%)", frequency_seconds &lt; 900, "Very high frequency (" . frequency_label . ")", avg_runtime_sec > 300, "Long runtime (" . avg_runtime_display . ")", 1=1, "") ' +
-              '| eval flag_status = "" ' +
-              '| eval cache_time = now() ' +
-              '| outputlookup governance_search_cache.csv';
-
-            require(['splunkjs/mvc/searchmanager'], function(SearchManager) {
-              var cacheSearch = new SearchManager({
-                id: 'run_cache_' + Date.now(),
-                search: searchQuery,
-                earliest_time: '-24h',
-                latest_time: 'now',
-                autostart: true
-              });
-
-              cacheSearch.on('search:progress', function(props) {
-                var scanCount = props.content.scanCount || 0;
-                if (searchesCount) searchesCount.textContent = 'Found ' + scanCount + ' scheduled searches...';
-              });
-
-              cacheSearch.on('search:done', function(props) {
-                clearInterval(progressInterval);
-                var resultCount = props.content.resultCount || 0;
-                updateProgress(100, 'Cache Complete!', resultCount + ' searches cached');
-                if (searchesCount) searchesCount.textContent = 'Successfully cached ' + resultCount + ' scheduled searches';
-                if (runCacheBtn) {
-                  runCacheBtn.textContent = 'Cache Complete!';
-                  runCacheBtn.style.background = '#53a051';
-                }
-                showToast('Cache refreshed! (' + resultCount + ' searches)');
-
-                // Hide progress and reset after 3 seconds
-                setTimeout(function() {
-                  if (progressContainer) progressContainer.style.display = 'none';
-                  if (runCacheBtn) {
-                    runCacheBtn.disabled = false;
-                    runCacheBtn.style.opacity = '1';
-                    runCacheBtn.textContent = 'Run Cache Now';
-                  }
-                  updateProgress(0, 'Building Cache...', 'Calculating...');
-                }, 3000);
-              });
-
-              cacheSearch.on('search:error', function(err) {
-                clearInterval(progressInterval);
-                updateProgress(0, 'Error!', 'Cache build failed');
-                if (statusText) statusText.style.color = '#dc4e41';
-                if (runCacheBtn) {
-                  runCacheBtn.disabled = false;
-                  runCacheBtn.style.opacity = '1';
-                  runCacheBtn.textContent = 'Run Cache Now';
-                }
-                showToast('Error refreshing cache: ' + err, true);
-                setTimeout(function() {
-                  if (progressContainer) progressContainer.style.display = 'none';
-                }, 5000);
-              });
-
-              cacheSearch.on('search:cancelled', function() {
-                clearInterval(progressInterval);
-                if (progressContainer) progressContainer.style.display = 'none';
-                if (runCacheBtn) {
-                  runCacheBtn.disabled = false;
-                  runCacheBtn.style.opacity = '1';
-                  runCacheBtn.textContent = 'Run Cache Now';
-                }
-              });
+            cacheSearch.on('search:done', function(props) {
+              showToast('Cache refreshed successfully! (' + (props.content.resultCount || 0) + ' searches cached)');
+              setTimeout(function() { location.reload(); }, 2000);
             });
-          };
 
-          window.saveRuntimeRatio = function() {
-            var value = getToken('new_runtime_ratio');
-            if (value) updateSetting('runtime_ratio_threshold', value, 'Max runtime as % of schedule');
-          };
-
-          window.saveFrequencyThreshold = function() {
-            var value = getToken('new_frequency_threshold');
-            if (value) updateSetting('high_frequency_threshold', value, 'Min seconds between runs');
-          };
-
-          window.saveLongRuntimeThreshold = function() {
-            var value = getToken('new_runtime_threshold');
-            if (value) updateSetting('long_runtime_threshold', value, 'Runtime threshold in seconds');
-          };
-
-          window.saveRemediationDays = function() {
-            var value = getToken('new_remediation_days');
-            if (value) updateSetting('remediation_days', value, 'Days for remediation');
-          };
-
-          window.saveEmailDomain = function() {
-            var value = getToken('email_domain');
-            if (value) updateSetting('email_domain', value, 'Email domain for notifications');
-          };
-
-          window.saveAdminEmail = function() {
-            var value = getToken('admin_email');
-            if (value) updateSetting('admin_email', value, 'Admin notification email');
-          };
-
-          window.addWastefulPattern = function() {
-            var pattern = getToken('new_wasteful_pattern');
-            var description = getToken('new_pattern_description');
-
-            if (!pattern || pattern.trim() === '') {
-              showToast('Please enter a pattern', true);
-              return;
-            }
-            if (!description || description.trim() === '') {
-              showToast('Please enter a description', true);
-              return;
-            }
-
-            var searchQuery = '| inputlookup wasteful_patterns_lookup ' +
-              '| append [| makeresults | eval pattern="' + pattern.replace(/"/g, '\\"') + '", description="' + description.replace(/"/g, '\\"') + '", is_default=0 | fields - _time] ' +
-              '| dedup pattern ' +
-              '| outputlookup wasteful_patterns_lookup';
-
-            require(['splunkjs/mvc/searchmanager'], function(SearchManager) {
-              var addSearch = new SearchManager({
-                id: 'add_pattern_' + Date.now(),
-                search: searchQuery,
-                earliest_time: '-1h',
-                latest_time: 'now',
-                autostart: true
-              });
-
-              addSearch.on('search:done', function() {
-                showToast('Pattern added: ' + pattern);
-                setToken('new_wasteful_pattern', '');
-                setToken('new_pattern_description', '');
-                setTimeout(function() { location.reload(); }, 1500);
-              });
-
-              addSearch.on('search:error', function(err) {
-                showToast('Error adding pattern: ' + err, true);
-              });
+            cacheSearch.on('search:error', function(err) {
+              alert('Error refreshing cache: ' + err);
             });
-          };
+          });
+        }
 
-          window.removeWastefulPattern = function(pattern) {
-            if (!pattern || pattern.indexOf('$') === 0) {
-              showToast('Please select a pattern first', true);
-              return;
-            }
-
-            var confirmed = confirm('Remove pattern "' + pattern + '"?');
-            if (!confirmed) return;
-
-            var searchQuery = '| inputlookup wasteful_patterns_lookup ' +
-              '| search pattern!="' + pattern.replace(/"/g, '\\"') + '" ' +
-              '| outputlookup wasteful_patterns_lookup';
-
-            require(['splunkjs/mvc/searchmanager'], function(SearchManager) {
-              var removeSearch = new SearchManager({
-                id: 'remove_pattern_' + Date.now(),
-                search: searchQuery,
-                earliest_time: '-1h',
-                latest_time: 'now',
-                autostart: true
-              });
-
-              removeSearch.on('search:done', function() {
-                showToast('Pattern removed');
-                setTimeout(function() { location.reload(); }, 1500);
-              });
-
-              removeSearch.on('search:error', function(err) {
-                showToast('Error removing pattern: ' + err, true);
-              });
-            });
-          };
-
-          console.log('Governance Settings JS initialized');
-        });
+        function showToast(message) {
+          var toast = document.createElement('div');
+          toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #53a051; color: white; padding: 12px 20px; border-radius: 6px; z-index: 10000; font-weight: 500;';
+          toast.textContent = message;
+          document.body.appendChild(toast);
+          setTimeout(function() { toast.remove(); }, 3000);
+        }
       </script>
       <style>
         .settings-form { margin-top: 10px; }
         #cost_config_table .shared-resultstable-resultstablerow { cursor: default !important; }
         #cost_config_table .shared-resultstable-resultstablerow:hover { background: transparent !important; }
-        #cost_config_table th:first-child input[type="checkbox"],
-        #cost_config_table td:first-child input[type="checkbox"] { display: none !important; }
       </style>
     </html>
   </row>

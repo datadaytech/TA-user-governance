@@ -1,7 +1,0 @@
-pattern,description,is_default
-"index=*","Searches scanning all indexes",1
-"| join","Expensive join operations",1
-"| transaction","Transaction commands",1
-"earliest=-30d","Extended time ranges (30+ days)",1
-"earliest=-60d","Extended time ranges (60+ days)",1
-"earliest=-90d","Extended time ranges (90+ days)",1
