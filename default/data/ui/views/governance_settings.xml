@@ -215,6 +215,39 @@
     </panel>
   </row>
 
+  <!-- Cache Build Progress Indicator -->
+  <row>
+    <panel>
+      <html>
+        <div id="cache-progress-container" style="display: none; background: rgba(0,109,156,0.1); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px; margin-top: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center;">
+              <div id="cache-spinner" style="width: 20px; height: 20px; border: 3px solid rgba(0,212,255,0.3); border-top: 3px solid #00d4ff; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 12px;"></div>
+              <span id="cache-status-text" style="color: #00d4ff; font-weight: 600;">Building Cache...</span>
+            </div>
+            <span id="cache-eta" style="color: rgba(255,255,255,0.7); font-size: 13px;">Estimated: calculating...</span>
+          </div>
+          <div style="background: rgba(0,0,0,0.3); border-radius: 4px; height: 8px; overflow: hidden;">
+            <div id="cache-progress-bar" style="background: linear-gradient(90deg, #00d4ff, #53a051); height: 100%; width: 0%; transition: width 0.5s ease;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+            <span id="cache-progress-text" style="color: rgba(255,255,255,0.6); font-size: 12px;">0% complete</span>
+            <span id="cache-searches-count" style="color: rgba(255,255,255,0.6); font-size: 12px;">Processing scheduled searches...</span>
+          </div>
+          <p style="color: rgba(255,255,255,0.5); font-size: 11px; margin: 12px 0 0 0; font-style: italic;">
+            ⓘ The cache pre-computes cost analysis for all scheduled searches. Other dashboards will use this cached data for faster loading.
+          </p>
+        </div>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </html>
+    </panel>
+  </row>
+
   <!-- Divider -->
   <row>
     <panel>
@@ -729,32 +762,130 @@
           };
 
           window.runCacheNow = function() {
+            // Show progress indicator
+            var progressContainer = document.getElementById('cache-progress-container');
+            var progressBar = document.getElementById('cache-progress-bar');
+            var progressText = document.getElementById('cache-progress-text');
+            var etaText = document.getElementById('cache-eta');
+            var statusText = document.getElementById('cache-status-text');
+            var searchesCount = document.getElementById('cache-searches-count');
+            var runCacheBtn = document.getElementById('run-cache-now-btn');
+
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (runCacheBtn) {
+              runCacheBtn.disabled = true;
+              runCacheBtn.style.opacity = '0.5';
+              runCacheBtn.textContent = 'Building Cache...';
+            }
+
+            var startTime = Date.now();
+            var estimatedDuration = 120000; // 2 minutes estimated
+            var progressInterval;
+
+            // Update progress bar animation
+            function updateProgress(percent, status, eta) {
+              if (progressBar) progressBar.style.width = percent + '%';
+              if (progressText) progressText.textContent = Math.round(percent) + '% complete';
+              if (statusText) statusText.textContent = status || 'Building Cache...';
+              if (etaText) etaText.textContent = eta || 'Calculating...';
+            }
+
+            // Simulate progress with ETA
+            progressInterval = setInterval(function() {
+              var elapsed = Date.now() - startTime;
+              var estimatedProgress = Math.min(95, (elapsed / estimatedDuration) * 100);
+              var remainingMs = Math.max(0, estimatedDuration - elapsed);
+              var remainingSec = Math.ceil(remainingMs / 1000);
+              var etaDisplay = remainingSec > 60
+                ? Math.ceil(remainingSec / 60) + ' min remaining'
+                : remainingSec + 's remaining';
+              updateProgress(estimatedProgress, 'Analyzing scheduled searches...', 'Estimated: ' + etaDisplay);
+            }, 500);
+
             var searchQuery = '| rest /servicesNS/-/-/saved/searches splunk_server=local ' +
               '| search is_scheduled=1 ' +
-              '| head 100 ' +
               '| rename eai:acl.owner as owner, eai:acl.app as app ' +
-              '| table title, owner, app, cron_schedule, disabled ' +
-              '| eval is_suspicious=0, suspicious_reason="", svc_per_run=20, monthly_cost=100, frequency_label="Daily", avg_runtime_display="30s", runtime_ratio=5, run_count=10, runs_per_month=30, avg_runtime_sec=30, max_runtime_sec=60, max_runtime_display="60s", runs_per_day=1, frequency_seconds=86400, monthly_svc=600, flag_status="", cache_time=now() ' +
+              '| table title, owner, app, cron_schedule, disabled, dispatch.earliest_time, dispatch.latest_time, qualifiedSearch ' +
+              '| join type=left title [| rest /servicesNS/-/-/search/jobs splunk_server=local | search savedsearch_name=* | stats avg(runDuration) as avg_runtime_sec count as run_count by savedsearch_name | rename savedsearch_name as title] ' +
+              '| eval avg_runtime_sec = if(isnull(avg_runtime_sec), 30, avg_runtime_sec) ' +
+              '| eval run_count = if(isnull(run_count), 0, run_count) ' +
+              '| eval frequency_seconds = case(match(cron_schedule, "^\\*/1 "), 60, match(cron_schedule, "^\\*/5 "), 300, match(cron_schedule, "^\\*/10 "), 600, match(cron_schedule, "^\\*/15 "), 900, match(cron_schedule, "^\\*/30 "), 1800, match(cron_schedule, "^0 \\* "), 3600, match(cron_schedule, "^0 \\*/"), 7200, 1=1, 86400) ' +
+              '| eval frequency_label = case(frequency_seconds=60, "Every minute", frequency_seconds=300, "Every 5 min", frequency_seconds=600, "Every 10 min", frequency_seconds=900, "Every 15 min", frequency_seconds=1800, "Every 30 min", frequency_seconds=3600, "Hourly", frequency_seconds &lt; 86400, "Every " . round(frequency_seconds/3600) . " hours", 1=1, "Daily") ' +
+              '| eval runtime_ratio = if(frequency_seconds > 0, round((avg_runtime_sec / frequency_seconds) * 100, 2), 0) ' +
+              '| eval runs_per_day = round(86400 / frequency_seconds, 1) ' +
+              '| eval runs_per_month = runs_per_day * 30 ' +
+              '| eval svc_per_run = round(avg_runtime_sec * 0.5, 2) ' +
+              '| eval monthly_svc = round(svc_per_run * runs_per_month, 0) ' +
+              '| eval monthly_cost = round(monthly_svc * 0.16, 2) ' +
+              '| eval avg_runtime_display = if(avg_runtime_sec &lt; 60, round(avg_runtime_sec, 1) . "s", round(avg_runtime_sec/60, 1) . "m") ' +
+              '| eval max_runtime_sec = avg_runtime_sec * 1.5 ' +
+              '| eval max_runtime_display = if(max_runtime_sec &lt; 60, round(max_runtime_sec, 1) . "s", round(max_runtime_sec/60, 1) . "m") ' +
+              '| eval is_suspicious = if(runtime_ratio > 10 OR frequency_seconds &lt; 900 OR avg_runtime_sec > 300, 1, 0) ' +
+              '| eval suspicious_reason = case(runtime_ratio > 10, "High runtime ratio (" . runtime_ratio . "%)", frequency_seconds &lt; 900, "Very high frequency (" . frequency_label . ")", avg_runtime_sec > 300, "Long runtime (" . avg_runtime_display . ")", 1=1, "") ' +
+              '| eval flag_status = "" ' +
+              '| eval cache_time = now() ' +
               '| outputlookup governance_search_cache.csv';
 
             require(['splunkjs/mvc/searchmanager'], function(SearchManager) {
               var cacheSearch = new SearchManager({
                 id: 'run_cache_' + Date.now(),
                 search: searchQuery,
-                earliest_time: '-1h',
+                earliest_time: '-24h',
                 latest_time: 'now',
                 autostart: true
               });
 
-              showToast('Running cache refresh... Please wait.');
+              cacheSearch.on('search:progress', function(props) {
+                var scanCount = props.content.scanCount || 0;
+                if (searchesCount) searchesCount.textContent = 'Found ' + scanCount + ' scheduled searches...';
+              });
 
               cacheSearch.on('search:done', function(props) {
-                showToast('Cache refreshed! (' + (props.content.resultCount || 0) + ' searches)');
-                setTimeout(function() { location.reload(); }, 2000);
+                clearInterval(progressInterval);
+                var resultCount = props.content.resultCount || 0;
+                updateProgress(100, 'Cache Complete!', resultCount + ' searches cached');
+                if (searchesCount) searchesCount.textContent = 'Successfully cached ' + resultCount + ' scheduled searches';
+                if (runCacheBtn) {
+                  runCacheBtn.textContent = 'Cache Complete!';
+                  runCacheBtn.style.background = '#53a051';
+                }
+                showToast('Cache refreshed! (' + resultCount + ' searches)');
+
+                // Hide progress and reset after 3 seconds
+                setTimeout(function() {
+                  if (progressContainer) progressContainer.style.display = 'none';
+                  if (runCacheBtn) {
+                    runCacheBtn.disabled = false;
+                    runCacheBtn.style.opacity = '1';
+                    runCacheBtn.textContent = 'Run Cache Now';
+                  }
+                  updateProgress(0, 'Building Cache...', 'Calculating...');
+                }, 3000);
               });
 
               cacheSearch.on('search:error', function(err) {
+                clearInterval(progressInterval);
+                updateProgress(0, 'Error!', 'Cache build failed');
+                if (statusText) statusText.style.color = '#dc4e41';
+                if (runCacheBtn) {
+                  runCacheBtn.disabled = false;
+                  runCacheBtn.style.opacity = '1';
+                  runCacheBtn.textContent = 'Run Cache Now';
+                }
                 showToast('Error refreshing cache: ' + err, true);
+                setTimeout(function() {
+                  if (progressContainer) progressContainer.style.display = 'none';
+                }, 5000);
+              });
+
+              cacheSearch.on('search:cancelled', function() {
+                clearInterval(progressInterval);
+                if (progressContainer) progressContainer.style.display = 'none';
+                if (runCacheBtn) {
+                  runCacheBtn.disabled = false;
+                  runCacheBtn.style.opacity = '1';
+                  runCacheBtn.textContent = 'Run Cache Now';
+                }
               });
             });
           };
