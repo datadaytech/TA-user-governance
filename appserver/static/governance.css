@@ -765,46 +765,17 @@ tr.gov-enhanced:has(.gov-checkbox:checked) {
     position: relative;
 }
 
-/* Custom checkbox styling for better visibility */
+/* Custom checkbox styling for better visibility - use native checkbox with accent color */
 .gov-checkbox,
 .gov-select-all {
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
+    -webkit-appearance: checkbox !important;
+    -moz-appearance: checkbox !important;
+    appearance: checkbox !important;
     width: 20px !important;
     height: 20px !important;
-    border: 2px solid rgba(255, 255, 255, 0.4) !important;
-    border-radius: 4px !important;
-    background: rgba(255, 255, 255, 0.1) !important;
     cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    position: relative !important;
-}
-
-.gov-checkbox:hover,
-.gov-select-all:hover {
-    border-color: #00d4ff !important;
-    background: rgba(0, 212, 255, 0.2) !important;
-}
-
-.gov-checkbox:checked,
-.gov-select-all:checked {
-    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%) !important;
-    border-color: #00d4ff !important;
-}
-
-/* Checkmark inside checked checkbox */
-.gov-checkbox:checked::after,
-.gov-select-all:checked::after {
-    content: '✓' !important;
-    position: absolute !important;
-    top: 50% !important;
-    left: 50% !important;
-    transform: translate(-50%, -50%) !important;
-    color: white !important;
-    font-size: 14px !important;
-    font-weight: bold !important;
-    line-height: 1 !important;
+    accent-color: #00d4ff !important;
+    filter: brightness(1.2) !important;
 }
 
 /* Row with checked checkbox - blue highlight only */

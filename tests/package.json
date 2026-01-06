@@ -7,15 +7,24 @@
     "test:headed": "npx playwright test --headed",
     "test:debug": "npx playwright test --debug",
     "test:ui": "npx playwright test --ui",
+    "test:unit": "npx jest unit/",
+    "test:checkbox": "npx playwright test checkbox.spec.js",
+    "test:all": "npm run test:unit && npm run test",
     "report": "npx playwright show-report",
     "start-splunk": "docker start splunk-dev && echo 'Waiting for Splunk...' && sleep 30",
     "stop-splunk": "docker stop splunk-dev"
   },
-  "keywords": ["splunk", "testing", "playwright", "governance"],
+  "keywords": [
+    "splunk",
+    "testing",
+    "playwright",
+    "governance"
+  ],
   "author": "DataDay Technology Solutions",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@playwright/test": "^1.57.0"
+    "@playwright/test": "^1.57.0",
+    "jest": "^29.7.0"
   }
 }

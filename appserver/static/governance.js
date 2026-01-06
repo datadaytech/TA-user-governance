@@ -1869,15 +1869,14 @@ require([
         });
     }
 
-    // Handle select all checkbox
-    $(document).on('click', '.gov-select-all', function(e) {
+    // Handle select all checkbox - use 'change' event
+    $(document).on('change', '.gov-select-all', function(e) {
         e.stopPropagation();
 
         var $selectAll = $(this);
-        // With appearance:none, manually toggle
-        var wasChecked = $selectAll.prop('checked');
-        var isChecked = !wasChecked;
-        $selectAll.prop('checked', isChecked);
+        var isChecked = $selectAll.prop('checked');
+
+        console.log("Select-all changed, now:", isChecked);
 
         var $table = $selectAll.closest('table');
         $table.find('.gov-checkbox').each(function() {
@@ -1893,22 +1892,48 @@ require([
         updateSelectedSearches();
     });
 
-    // Handle individual checkbox click
-    $(document).on('click', '.gov-checkbox', function(e) {
+    // Handle select-all change - responds AFTER browser has toggled the checkbox
+    // Note: With appearance:checkbox, browser natively toggles on click
+    $(document).on('change', '.gov-select-all', function(e) {
+        e.stopPropagation();
+
+        var $selectAll = $(this);
+        var isChecked = $selectAll.prop('checked');
+
+        // Get the table this select-all belongs to
+        var $table = $selectAll.closest('table');
+
+        // Update all checkboxes in this table
+        $table.find('.gov-checkbox').prop('checked', isChecked);
+
+        // Update row highlighting
+        $table.find('tr.gov-enhanced').each(function() {
+            var $row = $(this);
+            if (isChecked) {
+                $row.addClass('row-selected');
+            } else {
+                $row.removeClass('row-selected');
+            }
+        });
+
+        updateSelectedSearches();
+        updateBulkActionVisibility();
+    });
+
+    // Handle individual checkbox change - use 'change' event, NOT 'click'
+    // The browser toggles the checkbox on click even with appearance:none
+    // Using 'change' ensures we respond AFTER the browser has toggled the state
+    $(document).on('change', '.gov-checkbox', function(e) {
         e.stopPropagation();
 
         var $checkbox = $(this);
+        var isChecked = $checkbox.prop('checked');
 
-        // With appearance:none, the browser doesn't auto-toggle - we must do it manually
-        var wasChecked = $checkbox.prop('checked');
-        var isNowChecked = !wasChecked;
-        $checkbox.prop('checked', isNowChecked);
-
-        console.log("Checkbox clicked, was:", wasChecked, "now:", isNowChecked);
+        console.log("Checkbox changed, now:", isChecked);
 
         // Update row visual state
         var $row = $checkbox.closest('tr');
-        if (isNowChecked) {
+        if (isChecked) {
             $row.addClass('row-selected');
         } else {
             $row.removeClass('row-selected');
@@ -1921,6 +1946,50 @@ require([
         var total = $table.find('.gov-checkbox').length;
         var checked = $table.find('.gov-checkbox:checked').length;
         $table.find('.gov-select-all').prop('checked', total === checked);
+    });
+
+    // Handle checkbox click - use data attribute for selection state
+    // The native checkbox behavior is unreliable due to Splunk framework interference
+    // So we track selection state via data-selected attribute and sync to checked property
+    $(document).on('click', '.gov-checkbox', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var $checkbox = $(this);
+        var wasSelected = $checkbox.attr('data-selected') === 'true';
+        var newState = !wasSelected;
+
+        // Update our data attribute (source of truth)
+        $checkbox.attr('data-selected', newState ? 'true' : 'false');
+
+        // Sync to checked property (for visual display)
+        // Use setTimeout to ensure it happens after any framework resets
+        setTimeout(function() {
+            $checkbox.prop('checked', newState);
+        }, 0);
+
+        // Trigger change event
+        $checkbox.trigger('change');
+    });
+
+    // Handle select-all click - same approach with data attribute
+    $(document).on('click', '.gov-select-all', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var $selectAll = $(this);
+        var wasSelected = $selectAll.attr('data-selected') === 'true';
+        var newState = !wasSelected;
+
+        $selectAll.attr('data-selected', newState ? 'true' : 'false');
+
+        setTimeout(function() {
+            $selectAll.prop('checked', newState);
+        }, 0);
+
+        $selectAll.trigger('change');
     });
 
     // Update selected searches array
