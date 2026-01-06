@@ -38,7 +38,7 @@
         <option name="drilldown">none</option>
         <option name="numberPrecision">0.00</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
-        <option name="rangeValues">[500,2000]</option>
+        <option name="rangeValues">[500000,1500000]</option>
         <option name="useColors">1</option>
         <option name="unit">$</option>
       </single>
@@ -58,20 +58,20 @@
         <option name="colorBy">value</option>
         <option name="drilldown">none</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
-        <option name="rangeValues">[6000,24000]</option>
+        <option name="rangeValues">[6000000,18000000]</option>
         <option name="useColors">1</option>
         <option name="unit">$</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>SVC Cost per Unit</title>
+        <title>Annual SVC Cost</title>
         <search>
           <query>| inputlookup governance_settings_lookup
 | search setting_name="svc_unit_cost"
-| append [| makeresults | eval setting_value="0.10"]
+| append [| makeresults | eval setting_value="1600"]
 | head 1
-| eval cost = "$".setting_value</query>
+| eval cost = "$".setting_value."/SVC/year"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
@@ -114,7 +114,8 @@
 | eval mock_svc_saved = 85
 | eval runs_per_month_saved = 720
 | eval monthly_svc_saved = mock_svc_saved * runs_per_month_saved
-| eval saved_monthly_cost = round(monthly_svc_saved * 0.10, 2)
+| eval svc_annual_cost = 1600
+| eval saved_monthly_cost = round(monthly_svc_saved * (svc_annual_cost / 12), 2)
 | stats sum(saved_monthly_cost) as total_monthly_savings</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -122,7 +123,7 @@
         <option name="colorBy">value</option>
         <option name="drilldown">none</option>
         <option name="rangeColors">["0x708794","0x53a051","0x65a637"]</option>
-        <option name="rangeValues">[500,2000]</option>
+        <option name="rangeValues">[500000,2000000]</option>
         <option name="useColors">1</option>
         <option name="unit">$</option>
       </single>
@@ -215,7 +216,7 @@
         <search>
           <query>| inputlookup governance_search_cache.csv
 | search disabled=0
-| eval cost_tier = case(monthly_cost >= 500, "Critical", monthly_cost >= 200, "High", monthly_cost >= 75, "Medium", monthly_cost >= 25, "Low", 1=1, "Minimal")
+| eval cost_tier = case(monthly_cost >= 50000, "Critical", monthly_cost >= 20000, "High", monthly_cost >= 5000, "Medium", monthly_cost >= 1000, "Low", 1=1, "Minimal")
 | stats count by cost_tier
 | eval sort_order = case(cost_tier="Critical", 1, cost_tier="High", 2, cost_tier="Medium", 3, cost_tier="Low", 4, 1=1, 5)
 | sort sort_order
@@ -259,7 +260,7 @@
 | eval monthly_cost_display = "$".tostring(round(monthly_cost, 2))
 | eval annual_cost = monthly_cost * 12
 | eval annual_cost_display = "$".tostring(round(annual_cost, 2))
-| eval cost_tier = case(monthly_cost >= 500, "Critical", monthly_cost >= 200, "High", monthly_cost >= 75, "Medium", monthly_cost >= 25, "Low", 1=1, "Minimal")
+| eval cost_tier = case(monthly_cost >= 50000, "Critical", monthly_cost >= 20000, "High", monthly_cost >= 5000, "Medium", monthly_cost >= 1000, "Low", 1=1, "Minimal")
 | table title, owner, app, cron_schedule, frequency_label, runs_per_month, svc_per_run_display, monthly_svc_display, monthly_cost_display, annual_cost_display, cost_tier
 | rename title as "Search Name", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", runs_per_month as "Runs/Month", svc_per_run_display as "SVC/Run", monthly_svc_display as "Monthly SVCs", monthly_cost_display as "Monthly Cost", annual_cost_display as "Annual Cost", cost_tier as "Cost Tier"
 | sort - "Monthly Cost"
@@ -338,15 +339,15 @@
           <div style="margin-top: 20px; display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;">
             <div style="text-align: center; min-width: 150px;">
               <div style="font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">Cost Model</div>
-              <div style="font-size: 14px; color: white; margin-top: 4px;">SVC-based pricing @ $0.10/SVC</div>
+              <div style="font-size: 14px; color: white; margin-top: 4px;">$1,600/SVC annually ($133.33/mo)</div>
             </div>
             <div style="text-align: center; min-width: 150px;">
               <div style="font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">Regular Search</div>
-              <div style="font-size: 14px; color: white; margin-top: 4px;">15-30 SVCs/run</div>
+              <div style="font-size: 14px; color: white; margin-top: 4px;">15-30 SVCs/run (~$2-4K/mo)</div>
             </div>
             <div style="text-align: center; min-width: 150px;">
               <div style="font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">Expensive Search</div>
-              <div style="font-size: 14px; color: white; margin-top: 4px;">80-120 SVCs/run</div>
+              <div style="font-size: 14px; color: white; margin-top: 4px;">80-120 SVCs/run (~$10-16K/mo)</div>
             </div>
             <div style="text-align: center; min-width: 150px;">
               <div style="font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px;">Optimization Target</div>
