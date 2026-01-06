@@ -8,9 +8,9 @@
       <single>
         <title>Total Monthly SVC Usage</title>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
-| stats sum(monthly_svc_usage) as total_svc_usage</query>
+| stats sum(monthly_svc) as total_svc_usage</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
@@ -27,9 +27,9 @@
       <single>
         <title>Total Monthly Cost (Active Searches)</title>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
-| stats sum(monthly_total_cost) as total_monthly_cost
+| stats sum(monthly_cost) as total_monthly_cost
 | eval display = "$".tostring(round(total_monthly_cost, 0))</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -47,8 +47,9 @@
       <single>
         <title>Estimated Annual Cost</title>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
+| eval annual_cost = monthly_cost * 12
 | stats sum(annual_cost) as total_annual_cost
 | eval display = "$".tostring(round(total_annual_cost, 0))</query>
           <earliest>-24h@h</earliest>
@@ -172,9 +173,9 @@
       <title>Monthly SVC Usage by Application</title>
       <chart>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
-| stats sum(monthly_svc_usage) as svc_usage by app
+| stats sum(monthly_svc) as svc_usage by app
 | sort - svc_usage
 | head 15</query>
           <earliest>-24h@h</earliest>
@@ -190,9 +191,9 @@
       <title>Monthly SVC Usage by Owner</title>
       <chart>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
-| stats sum(monthly_svc_usage) as svc_usage by owner
+| stats sum(monthly_svc) as svc_usage by owner
 | sort - svc_usage
 | head 15</query>
           <earliest>-24h@h</earliest>
@@ -212,15 +213,11 @@
       <title>Cost Tier Distribution</title>
       <chart>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
+| eval cost_tier = case(monthly_cost >= 500, "Critical", monthly_cost >= 200, "High", monthly_cost >= 75, "Medium", monthly_cost >= 25, "Low", 1=1, "Minimal")
 | stats count by cost_tier
-| eval sort_order = case(
-    cost_tier="Critical", 1,
-    cost_tier="High", 2,
-    cost_tier="Medium", 3,
-    cost_tier="Low", 4,
-    1=1, 5)
+| eval sort_order = case(cost_tier="Critical", 1, cost_tier="High", 2, cost_tier="Medium", 3, cost_tier="Low", 4, 1=1, 5)
 | sort sort_order
 | fields - sort_order</query>
           <earliest>-24h@h</earliest>
@@ -235,9 +232,9 @@
       <title>SVC Usage by Frequency</title>
       <chart>
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
-| stats sum(monthly_svc_usage) as "SVC Usage" count as "Search Count" by frequency_label
+| stats sum(monthly_svc) as "SVC Usage" count as "Search Count" by frequency_label
 | sort - "SVC Usage"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -255,14 +252,17 @@
       <title>Highest Cost Scheduled Searches - Optimization Candidates</title>
       <table id="high_cost_table">
         <search>
-          <query>| `analyze_search_costs`
+          <query>| inputlookup governance_search_cache.csv
 | search disabled=0
 | eval svc_per_run_display = tostring(round(svc_per_run, 0))
-| eval monthly_svc_display = tostring(round(monthly_svc_usage, 0))
-| eval monthly_cost_display = "$".tostring(round(monthly_total_cost, 2))
+| eval monthly_svc_display = tostring(round(monthly_svc, 0))
+| eval monthly_cost_display = "$".tostring(round(monthly_cost, 2))
+| eval annual_cost = monthly_cost * 12
 | eval annual_cost_display = "$".tostring(round(annual_cost, 2))
+| eval cost_tier = case(monthly_cost >= 500, "Critical", monthly_cost >= 200, "High", monthly_cost >= 75, "Medium", monthly_cost >= 25, "Low", 1=1, "Minimal")
 | table title, owner, app, cron_schedule, frequency_label, runs_per_month, svc_per_run_display, monthly_svc_display, monthly_cost_display, annual_cost_display, cost_tier
 | rename title as "Search Name", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", runs_per_month as "Runs/Month", svc_per_run_display as "SVC/Run", monthly_svc_display as "Monthly SVCs", monthly_cost_display as "Monthly Cost", annual_cost_display as "Annual Cost", cost_tier as "Cost Tier"
+| sort - "Monthly Cost"
 | head 25</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
