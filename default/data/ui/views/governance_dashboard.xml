@@ -43,9 +43,14 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">total</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Total Scheduled Searches</set>
+        </drilldown>
       </single>
     </panel>
     <panel id="suspicious_metric_panel">
@@ -60,25 +65,35 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[5,10]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">suspicious</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Suspicious Searches</set>
+        </drilldown>
       </single>
     </panel>
     <panel id="flagged_metric_panel">
       <single id="flagged_metric">
         <title>Currently Flagged</title>
         <search>
-          <query>| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" | stats count</query>
+          <query>| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" OR status="disabled" | stats dc(search_name) as count</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[3,7]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">flagged</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Flagged Searches</set>
+        </drilldown>
       </single>
     </panel>
     <panel id="expiring_metric_panel">
@@ -87,6 +102,7 @@
         <search>
           <query>| inputlookup flagged_searches_lookup
 | search status="pending" OR status="notified"
+| dedup search_name
 | eval days_remaining = round((remediation_deadline - now()) / 86400, 1)
 | where days_remaining >= 0 AND days_remaining &lt;= 3
 | stats count</query>
@@ -94,10 +110,15 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[1,3]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">expiring</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Expiring Soon</set>
+        </drilldown>
       </single>
     </panel>
     <panel id="disabled_metric_panel">
@@ -106,19 +127,24 @@
         <search>
           <query>| inputlookup flagged_searches_lookup
 | search status="disabled"
+| dedup search_name
 | eval days_ago = (now() - flagged_time) / 86400
-| inputlookup append=true governance_settings_lookup
-| eval remediation_days = if(setting_name="remediation_days", tonumber(setting_value), null())
-| stats max(remediation_days) as max_days, count(eval(status="disabled" AND days_ago &lt;= 7)) as disabled_count
+| where days_ago &lt;= 7
+| stats count as disabled_count
 | eval disabled_count = if(isnull(disabled_count), 0, disabled_count)
 | table disabled_count</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">disabled</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Auto-Disabled Searches</set>
+        </drilldown>
       </single>
     </panel>
   </row>
@@ -163,11 +189,11 @@
       </table>
       <html>
         <div class="action-buttons" id="suspicious-actions">
-          <button class="btn btn-primary" id="flag-selected-btn" onclick="flagSelectedSearch()">Flag Selected</button>
-          <button class="btn" id="unflag-selected-btn" onclick="unflagSearch()">Unflag Selected</button>
-          <button class="btn" id="preview-impact-btn" onclick="previewImpact()">Preview Impact</button>
-          <button class="btn" id="email-owner-btn" onclick="emailOwner()">Email Owner</button>
-          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" onclick="viewFlaggedSearches()">View All Flagged</button>
+          <button class="btn btn-primary" id="flag-selected-btn">Flag Selected</button>
+          <button class="btn" id="unflag-selected-btn">Unflag Selected</button>
+          <button class="btn" id="preview-impact-btn">Preview Impact</button>
+          <button class="btn" id="email-owner-btn">Email Owner</button>
+          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" id="view-flagged-btn">View All Flagged</button>
         </div>
       </html>
     </panel>
@@ -209,7 +235,7 @@
       <table id="all_searches_table">
         <search>
           <query>| inputlookup governance_search_cache.csv
-| search disabled=$filter_status$ app=$filter_app$ owner=$filter_owner$
+| search app=$filter_app$ owner=$filter_owner$
 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status, remediation_deadline, flagged_by, flagged_time, reason as flag_reason
 | eval governance_status = case(
     flag_status="disabled", "Disabled by Governance",
@@ -218,7 +244,7 @@
     is_suspicious=1, "Suspicious",
     1=1, "OK")
 | eval days_remaining = if(isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), null())
-| eval is_flagged_search = if(flag_status="pending" OR flag_status="notified", 1, 0)
+| eval is_flagged_search = if(flag_status="pending" OR flag_status="notified" OR flag_status="disabled", 1, 0)
 | eval is_expiring_soon = if(isnotnull(days_remaining) AND days_remaining >= 0 AND days_remaining &lt;= 3, 1, 0)
 | eval view_match = case(
     "$view_filter$"="flagged", is_flagged_search,
@@ -226,6 +252,13 @@
     "$view_filter$"="suspicious", is_suspicious,
     1=1, 1)
 | where view_match=1
+| eval status_filter_match = case(
+    "$view_filter$"="flagged", 1,
+    "$view_filter$"="expiring", 1,
+    "$filter_status$"="*", 1,
+    disabled=$filter_status$, 1,
+    1=1, 0)
+| where status_filter_match=1
 | eval flagged_date = if(isnotnull(flagged_time), strftime(flagged_time, "%Y-%m-%d"), "")
 | eval deadline_date = if(isnotnull(remediation_deadline), strftime(remediation_deadline, "%Y-%m-%d"), "")
 | eval sort_priority = case(
@@ -234,8 +267,15 @@
     is_suspicious=1, 3,
     1=1, 4)
 | sort sort_priority, days_remaining, - runtime_ratio
-| table title, owner, app, cron_schedule, frequency_label, avg_runtime_display, run_count, runtime_ratio, svc_per_run, monthly_cost, governance_status, days_remaining, flagged_by, flag_reason
-| rename title as "Search Name", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", run_count as "Runs", runtime_ratio as "Runtime %", svc_per_run as "SVC/Run", monthly_cost as "Cost/Mo", governance_status as "Status", days_remaining as "Days Left", flagged_by as "Flagged By", flag_reason as "Flag Reason"</query>
+| eval status_icon = case(
+    governance_status="Disabled by Governance", "🚫 ",
+    governance_status="Pending Remediation", "⚠️ ",
+    governance_status="Flagged", "🚩 ",
+    governance_status="Suspicious", "⚡ ",
+    1=1, "")
+| eval display_name = status_icon . title
+| table display_name, governance_status, owner, app, cron_schedule, frequency_label, avg_runtime_display, run_count, runtime_ratio, svc_per_run, monthly_cost, days_remaining, flagged_by, flag_reason
+| rename display_name as "Search Name", governance_status as "Status", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", run_count as "Runs", runtime_ratio as "Runtime %", svc_per_run as "SVC/Run", monthly_cost as "Cost/Mo", days_remaining as "Days Left", flagged_by as "Flagged By", flag_reason as "Flag Reason"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
           <refresh>1m</refresh>
@@ -245,7 +285,7 @@
         <option name="rowNumbers">true</option>
         <option name="wrap">false</option>
         <format type="color" field="Status">
-          <colorPalette type="map">{"OK":#53A051,"Suspicious":#F8BE34,"Flagged":#F1813F,"Pending Remediation":#DC4E41,"Disabled by Governance":#708794}</colorPalette>
+          <colorPalette type="map">{"OK":#53A051,"Suspicious":#F8BE34,"Flagged":#F1813F,"Pending Remediation":#DC4E41,"Disabled by Governance":#708794,"Enabled":#2EA043}</colorPalette>
         </format>
         <format type="color" field="Runtime %">
           <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
@@ -262,12 +302,12 @@
       </table>
       <html>
         <div class="action-buttons" id="all-searches-actions">
-          <button class="btn btn-primary" id="flag-btn-2" onclick="flagSelectedSearch()">Flag Selected</button>
-          <button class="btn" id="unflag-btn-2" onclick="unflagSearch()">Unflag Selected</button>
-          <button class="btn" id="preview-btn-2" onclick="previewImpact()">Preview Impact</button>
-          <button class="btn" id="email-btn-2" onclick="emailOwner()">Email Owner</button>
-          <button class="btn btn-warning" id="disable-expiring-btn" onclick="disableExpiringSoon()">Disable Expiring Soon</button>
-          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" onclick="viewFlaggedSearches()">View Flagged Modal</button>
+          <button class="btn btn-primary" id="flag-btn-2">Flag Selected</button>
+          <button class="btn" id="unflag-btn-2">Unflag Selected</button>
+          <button class="btn" id="preview-btn-2">Preview Impact</button>
+          <button class="btn" id="email-btn-2">Email Owner</button>
+          <button class="btn btn-warning" id="disable-expiring-btn">Disable Expiring Soon</button>
+          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" id="view-flagged-btn-2">View Flagged Modal</button>
         </div>
       </html>
     </panel>
@@ -291,11 +331,11 @@
       </table>
       <html>
         <div class="action-buttons" id="detail-actions">
-          <button class="btn btn-primary" id="flag-this-btn" onclick="flagThisSearch('$selected_search$', '$selected_owner$', '$selected_app$')">Flag This Search</button>
-          <button class="btn" id="unflag-this-btn" onclick="unflagSearch()">Unflag This Search</button>
-          <button class="btn" id="preview-this-btn" onclick="previewImpact()">Preview Impact</button>
-          <button class="btn" id="email-this-owner-btn" onclick="emailThisOwner('$selected_owner$', '$selected_search$')">Email Owner</button>
-          <button class="btn" id="clear-selection-btn" onclick="clearSelection()">Clear Selection</button>
+          <button class="btn btn-primary" id="flag-this-btn">Flag This Search</button>
+          <button class="btn" id="unflag-this-btn">Unflag This Search</button>
+          <button class="btn" id="preview-this-btn">Preview Impact</button>
+          <button class="btn" id="email-this-owner-btn">Email Owner</button>
+          <button class="btn" id="clear-selection-btn">Clear Selection</button>
         </div>
       </html>
     </panel>

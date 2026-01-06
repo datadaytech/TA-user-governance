@@ -1,4 +1,4 @@
-cron_pattern,frequency_seconds,frequency_label
+cron_schedule,frequency_seconds,frequency_label
 "*/1 * * * *",60,Every Minute
 "*/2 * * * *",120,Every 2 Minutes
 "*/5 * * * *",300,Every 5 Minutes

@@ -81,6 +81,306 @@ require([
             .replace(/>/g, '&gt;');
     }
 
+    // Format countdown timer display from deadline epoch
+    function formatCountdownTimer(deadlineEpoch, status) {
+        // If disabled, show N/A
+        if (status === 'disabled') {
+            return '<span class="countdown-disabled" style="color: rgba(255,255,255,0.4);">N/A</span>';
+        }
+
+        // If under review, show paused timer
+        if (status === 'review') {
+            return '<span class="countdown-review" style="color: #6f42c1; font-weight: 600;">⏸️ Under Review</span>';
+        }
+
+        if (!deadlineEpoch) {
+            return '<span style="color: rgba(255,255,255,0.4);">—</span>';
+        }
+
+        var now = Date.now() / 1000; // Current time in seconds
+        var remaining = deadlineEpoch - now;
+
+        if (remaining <= 0) {
+            // Deadline has passed - show overdue
+            var overdueDays = Math.abs(Math.floor(remaining / 86400));
+            return '<span class="countdown-overdue" style="color: #dc4e41; font-weight: 700; animation: countdownPulse 1s ease-in-out infinite;">⚠️ OVERDUE ' + overdueDays + 'd</span>';
+        }
+
+        var days = Math.floor(remaining / 86400);
+        var hours = Math.floor((remaining % 86400) / 3600);
+        var minutes = Math.floor((remaining % 3600) / 60);
+        var seconds = Math.floor(remaining % 60);
+
+        var timerClass = '';
+        var timerStyle = '';
+        var timerIcon = '';
+
+        if (days === 0 && hours < 24) {
+            // Critical - less than 24 hours
+            timerClass = 'countdown-critical';
+            timerStyle = 'color: #dc4e41; font-weight: 700; animation: countdownPulse 0.5s ease-in-out infinite;';
+            timerIcon = '🔴 ';
+        } else if (days <= 2) {
+            // Urgent - 2 days or less
+            timerClass = 'countdown-urgent';
+            timerStyle = 'color: #f8be34; font-weight: 600; animation: countdownPulse 1s ease-in-out infinite;';
+            timerIcon = '🟡 ';
+        } else if (days <= 5) {
+            // Warning - 5 days or less
+            timerClass = 'countdown-warning';
+            timerStyle = 'color: #f1813f; font-weight: 500;';
+            timerIcon = '🟠 ';
+        } else {
+            // Normal
+            timerClass = 'countdown-normal';
+            timerStyle = 'color: #53a051;';
+            timerIcon = '🟢 ';
+        }
+
+        // Format the display
+        var display;
+        if (days > 0) {
+            display = timerIcon + days + 'd ' + hours + 'h ' + minutes + 'm';
+        } else if (hours > 0) {
+            display = timerIcon + hours + 'h ' + minutes + 'm ' + seconds + 's';
+        } else {
+            display = timerIcon + minutes + 'm ' + seconds + 's';
+        }
+
+        return '<span class="' + timerClass + '" style="' + timerStyle + ' font-family: monospace; font-size: 13px;">' + display + '</span>';
+    }
+
+    // Start real-time countdown timer updates
+    function startCountdownTimer() {
+        // Clear any existing interval
+        if (window.countdownTimerInterval) {
+            clearInterval(window.countdownTimerInterval);
+        }
+
+        // Update every second for accurate countdown
+        window.countdownTimerInterval = setInterval(function() {
+            // Check if popup is still open
+            if (!$('#metricPopupOverlay').hasClass('active')) {
+                clearInterval(window.countdownTimerInterval);
+                window.countdownTimerInterval = null;
+                return;
+            }
+
+            // Update all countdown cells
+            $('.countdown-cell').each(function() {
+                var $cell = $(this);
+                var deadlineEpoch = parseFloat($cell.attr('data-deadline'));
+                var idx = parseInt($cell.attr('data-index'));
+                var status = currentMetricSearches[idx] ? currentMetricSearches[idx].status : '';
+
+                if (deadlineEpoch) {
+                    $cell.html(formatCountdownTimer(deadlineEpoch, status));
+                }
+            });
+        }, 1000); // Update every second
+    }
+
+    // Stop countdown timer when popup closes
+    $(document).on('click', '#metricPopupClose, #metricPopupOverlay', function(e) {
+        if (e.target === this || e.target.id === 'metricPopupClose') {
+            if (window.countdownTimerInterval) {
+                clearInterval(window.countdownTimerInterval);
+                window.countdownTimerInterval = null;
+            }
+        }
+    });
+
+    // Check for overdue searches and prompt for auto-disable
+    function checkAndPromptOverdueSearches() {
+        var overdueSearches = [];
+        var now = Date.now() / 1000;
+
+        currentMetricSearches.forEach(function(search, idx) {
+            // Only check pending/notified searches with valid deadlines
+            if (search.deadlineEpoch &&
+                (search.status === 'pending' || search.status === 'notified') &&
+                search.deadlineEpoch < now) {
+                overdueSearches.push({
+                    name: search.name,
+                    owner: search.owner,
+                    app: search.app,
+                    daysOverdue: Math.abs(Math.floor((search.deadlineEpoch - now) / 86400)),
+                    index: idx
+                });
+            }
+        });
+
+        if (overdueSearches.length > 0) {
+            // Show a notification banner about overdue searches
+            var banner = '<div id="overdueBanner" style="' +
+                'background: linear-gradient(135deg, rgba(220, 78, 65, 0.9) 0%, rgba(180, 50, 40, 0.9) 100%);' +
+                'padding: 12px 16px;' +
+                'margin-bottom: 10px;' +
+                'border-radius: 8px;' +
+                'display: flex;' +
+                'align-items: center;' +
+                'justify-content: space-between;' +
+                'animation: countdownPulse 1.5s ease-in-out infinite;' +
+                '">' +
+                '<div style="display: flex; align-items: center; gap: 10px;">' +
+                '<span style="font-size: 20px;">⚠️</span>' +
+                '<span style="font-weight: 600; color: white;">' +
+                overdueSearches.length + ' search(es) have exceeded their remediation deadline!' +
+                '</span>' +
+                '</div>' +
+                '<button id="autoDisableOverdue" style="' +
+                'background: white;' +
+                'color: #dc4e41;' +
+                'border: none;' +
+                'padding: 8px 16px;' +
+                'border-radius: 6px;' +
+                'font-weight: 600;' +
+                'cursor: pointer;' +
+                'transition: all 0.2s;' +
+                '">Auto-Disable All</button>' +
+                '</div>';
+
+            // Insert banner at top of popup body
+            var $popupBody = $('#metricPopupOverlay .metric-popup-body');
+            $popupBody.prepend(banner);
+
+            // Handle auto-disable button click
+            $('#autoDisableOverdue').on('click', function() {
+                autoDisableOverdueSearches(overdueSearches);
+            });
+        }
+    }
+
+    // Auto-disable all overdue searches
+    function autoDisableOverdueSearches(overdueSearches) {
+        if (!confirm('This will disable ' + overdueSearches.length + ' overdue search(es):\n\n' +
+            overdueSearches.map(function(s) {
+                return '• ' + s.name + ' (' + s.daysOverdue + ' days overdue)';
+            }).join('\n') +
+            '\n\nContinue?')) {
+            return;
+        }
+
+        showToast('Auto-disabling ' + overdueSearches.length + ' overdue search(es)...');
+
+        // Build conditions for all overdue searches
+        var conditions = overdueSearches.map(function(s) {
+            return 'search_name="' + escapeString(s.name) + '"';
+        }).join(' OR ');
+
+        // Update lookup to disable these searches
+        var disableQuery = '| inputlookup flagged_searches_lookup ' +
+            '| eval status = if(' + conditions + ', "disabled", status)' +
+            '| eval notes = if(' + conditions + ', notes + " | AUTO-DISABLED: Deadline exceeded on " + strftime(now(), "%Y-%m-%d %H:%M"), notes)' +
+            '| outputlookup flagged_searches_lookup';
+
+        runSearch(disableQuery, function(err) {
+            if (err) {
+                alert('Error auto-disabling searches: ' + err);
+                return;
+            }
+
+            // Log each disabled search
+            overdueSearches.forEach(function(s) {
+                logAction('auto-disabled', s.name, 'Deadline exceeded by ' + s.daysOverdue + ' days - auto-disabled by ' + currentUser);
+            });
+
+            // Also disable the actual saved searches via REST API
+            disableSearchesViaREST(overdueSearches);
+
+            // Remove the banner
+            $('#overdueBanner').fadeOut(300, function() { $(this).remove(); });
+
+            showToast('✓ ' + overdueSearches.length + ' overdue search(es) have been auto-disabled');
+
+            // Refresh the popup data
+            setTimeout(function() {
+                refreshDashboard();
+            }, 1000);
+        });
+    }
+
+    // Disable searches via REST API (helper function)
+    function disableSearchesViaREST(searches) {
+        searches.forEach(function(search) {
+            var localePrefix = window.location.pathname.split('/')[1];
+            if (localePrefix && localePrefix.match(/^[a-z]{2}-[A-Z]{2}$/)) {
+                localePrefix = '/' + localePrefix;
+            } else {
+                localePrefix = '';
+            }
+
+            // Try to disable via REST API
+            var disableUrl = localePrefix + '/splunkd/__raw/servicesNS/-/-/saved/searches/' +
+                encodeURIComponent(search.name) + '/disable';
+
+            $.ajax({
+                url: disableUrl,
+                type: 'POST',
+                data: { output_mode: 'json' },
+                error: function(xhr) {
+                    console.log('REST disable failed for ' + search.name + ':', xhr.status);
+                }
+            });
+        });
+    }
+
+    // Helper to generate status badge HTML
+    function getStatusBadges(status) {
+        var badges = [];
+        var statusLower = (status || '').toLowerCase();
+
+        // Badge styles
+        var badgeStyles = {
+            flagged: 'background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            pending: 'background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            notified: 'background: #5cc05c; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            enabled: 'background: #2ea043; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            disabled: 'background: #dc4e41; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            expiring: 'background: #dc4e41; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            suspicious: 'background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            active: 'background: #5cc05c; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            review: 'background: #6f42c1; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;'
+        };
+
+        // Badge labels
+        var badgeLabels = {
+            flagged: 'FLAGGED',
+            pending: 'FLAGGED',
+            notified: 'NOTIFIED',
+            enabled: 'ENABLED',
+            disabled: 'DISABLED',
+            expiring: 'EXPIRING',
+            suspicious: 'SUSPICIOUS',
+            active: 'ACTIVE',
+            review: 'PENDING REVIEW'
+        };
+
+        // Determine which badges to show
+        if (statusLower === 'disabled') {
+            badges.push('<span class="status-badge disabled" style="' + badgeStyles.disabled + '">DISABLED</span>');
+        } else if (statusLower === 'pending' || statusLower === 'flagged') {
+            badges.push('<span class="status-badge flagged" style="' + badgeStyles.pending + '">FLAGGED</span>');
+        } else if (statusLower === 'notified') {
+            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">NOTIFIED</span>');
+        } else if (statusLower === 'enabled') {
+            badges.push('<span class="status-badge enabled" style="' + badgeStyles.enabled + '">ENABLED</span>');
+        } else if (statusLower === 'expiring') {
+            badges.push('<span class="status-badge expiring" style="' + badgeStyles.expiring + '">EXPIRING</span>');
+        } else if (statusLower === 'suspicious') {
+            badges.push('<span class="status-badge suspicious" style="' + badgeStyles.suspicious + '">SUSPICIOUS</span>');
+        } else if (statusLower === 'active') {
+            badges.push('<span class="status-badge active" style="' + badgeStyles.active + '">ACTIVE</span>');
+        } else if (statusLower === 'review') {
+            badges.push('<span class="status-badge review" style="' + badgeStyles.review + '">📋 PENDING REVIEW</span>');
+        } else {
+            badges.push('<span class="status-badge" style="background: #666; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px;">' + escapeHtml(status || '-') + '</span>');
+        }
+
+        return badges.join('');
+    }
+    window.getStatusBadges = getStatusBadges;
+
     // Helper function to run a search
     function runSearch(searchQuery, callback) {
         var searchId = 'governance_action_' + Date.now();
@@ -298,7 +598,8 @@ require([
                     }
                 });
 
-                // NO panel refresh - keep it performant
+                // Refresh dashboard to update metric panels (Currently Flagged count)
+                refreshDashboard();
             }
         });
     }
@@ -421,8 +722,8 @@ require([
                 $('.gov-select-all').prop('checked', false);
                 selectedSearches = [];
 
-                // Don't auto-refresh - the visual update is already done
-                // and the data is persisted. Refresh will happen on next page load.
+                // Refresh dashboard to update metric panels (Currently Flagged count, etc.)
+                refreshDashboard();
             }
         });
     }
@@ -604,8 +905,19 @@ require([
         });
     }
 
+    // Debounce flag for disableNow
+    var disableInProgress = false;
+
     window.disableNow = function() {
         console.log("disableNow called");
+
+        // Prevent duplicate calls
+        if (disableInProgress) {
+            console.log("disableNow: already in progress, skipping");
+            return;
+        }
+        disableInProgress = true;
+        setTimeout(function() { disableInProgress = false; }, 500);
 
         var searches = getSelectedSearches();
         if (searches.length === 0) {
@@ -713,8 +1025,20 @@ require([
         });
     };
 
+    // Debounce flag for unflagSearch
+    var unflagInProgress = false;
+
     window.unflagSearch = function() {
-        console.log("unflagSearch called");
+        console.log("unflagSearch called, inProgress:", unflagInProgress);
+
+        // Prevent duplicate calls - use longer timeout to handle alert blocking
+        if (unflagInProgress) {
+            console.log("unflagSearch: already in progress, skipping");
+            return;
+        }
+        unflagInProgress = true;
+        // Use 3000ms timeout because alert() blocks JS but timers still run
+        setTimeout(function() { unflagInProgress = false; }, 3000);
 
         var searches = getSelectedSearches();
         if (searches.length === 0) {
@@ -1033,15 +1357,24 @@ require([
 
     var metricPopupHtml =
         '<div class="metric-popup-overlay" id="metricPopupOverlay">' +
-            '<div class="metric-popup">' +
-                '<div class="metric-popup-header">' +
-                    '<div class="metric-popup-value" id="metricPopupValue">0</div>' +
-                    '<div class="metric-popup-title" id="metricPopupTitle">Metric</div>' +
+            '<div class="metric-popup" style="max-width: 950px; width: 90%;">' +
+                '<div class="metric-popup-header" style="padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1);">' +
+                    '<div class="metric-popup-value" id="metricPopupValue" style="font-size: 48px; font-weight: 700; color: #5cc05c; line-height: 1.2;">0</div>' +
+                    '<div class="metric-popup-title" id="metricPopupTitle" style="font-size: 18px; color: rgba(255,255,255,0.8); margin-top: 8px; white-space: normal; word-wrap: break-word;">Metric</div>' +
                 '</div>' +
-                '<div class="metric-popup-body">' +
-                    '<ul class="metric-popup-list" id="metricPopupList"></ul>' +
+                '<div class="metric-popup-body" style="max-height: 450px; overflow-y: auto; padding: 15px;">' +
+                    '<table class="metric-popup-table" id="metricPopupTable" style="width: 100%; border-collapse: collapse;">' +
+                        '<thead id="metricPopupTableHead"></thead>' +
+                        '<tbody id="metricPopupTableBody"></tbody>' +
+                    '</table>' +
                 '</div>' +
-                '<div class="metric-popup-footer">' +
+                '<div class="metric-popup-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap;">' +
+                    '<button class="btn" style="background: #6f42c1; border-color: #6f42c1; color: white; display: none;" id="metricPopupSubmitReview">📋 Submit for Review</button>' +
+                    '<button class="btn" style="background: #2ea043; border-color: #2ea043; color: white; display: none;" id="metricPopupApprove">✓ Approve & Unflag</button>' +
+                    '<button class="btn" style="background: #f8be34; border-color: #f8be34; color: #000; display: none;" id="metricPopupReject">✗ Reject Review</button>' +
+                    '<button class="btn" style="background: #5cc05c; border-color: #5cc05c; color: white; display: none;" id="metricPopupEnable">Enable Selected</button>' +
+                    '<button class="btn" style="background: #dc4e41; border-color: #dc4e41; color: white;" id="metricPopupDisable">Disable Selected</button>' +
+                    '<button class="btn btn-primary" id="metricPopupExtend">Extend Deadline</button>' +
                     '<button class="btn btn-secondary" id="metricPopupClose">Close</button>' +
                 '</div>' +
             '</div>' +
@@ -1114,6 +1447,615 @@ require([
             }
         });
 
+        // Metric popup select all checkbox
+        $(document).on('change', '#metricSelectAll', function() {
+            var isChecked = $(this).prop('checked');
+            $('.metric-row-checkbox').prop('checked', isChecked);
+        });
+
+        // Metric popup row click to toggle checkbox
+        $(document).on('click', '.metric-popup-row td:not(:first-child)', function() {
+            var $checkbox = $(this).closest('tr').find('.metric-row-checkbox');
+            $checkbox.prop('checked', !$checkbox.prop('checked'));
+        });
+
+        // Metric popup Disable button
+        $(document).on('click', '#metricPopupDisable', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to disable.');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to disable ' + selectedSearches.length + ' search(es)?')) {
+                return;
+            }
+
+            console.log('Disabling searches:', selectedSearches);
+
+            var successCount = 0;
+            var failCount = 0;
+            var totalCount = selectedSearches.length;
+
+            // Get locale from current URL or use empty string for relative path
+            var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
+            var localePrefix = locale ? '/' + locale[1] : '';
+
+            // Disable each search via REST API using /disable endpoint
+            // See: https://docs.splunk.com/Documentation/SplunkCloud/latest/RESTREF/RESTsearch
+            selectedSearches.forEach(function(search, idx) {
+                // Try multiple contexts for better compatibility
+                var contexts = [
+                    { owner: search.owner, app: search.app },
+                    { owner: 'nobody', app: search.app },
+                    { owner: '-', app: search.app }
+                ];
+
+                function tryDisable(ctxIndex) {
+                    if (ctxIndex >= contexts.length) {
+                        console.error('All disable attempts failed for:', search.name);
+                        failCount++;
+                        if (successCount + failCount === totalCount) {
+                            showDisableComplete(successCount, failCount);
+                        }
+                        return;
+                    }
+
+                    var ctx = contexts[ctxIndex];
+                    var disableUrl = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(search.name) + '/disable';
+
+                    console.log('Trying disable URL (' + (ctxIndex + 1) + '/' + contexts.length + '):', disableUrl);
+
+                    $.ajax({
+                        url: disableUrl,
+                        type: 'POST',
+                        data: {},  // No data needed for /disable endpoint
+                        success: function() {
+                            console.log('Successfully disabled:', search.name, 'using context:', ctx);
+                            successCount++;
+                            updateDisabledRowUI(search);
+                            if (successCount + failCount === totalCount) {
+                                showDisableComplete(successCount, failCount);
+                            }
+                        },
+                        error: function(xhr) {
+                            console.log('Disable failed for context', ctx, 'Status:', xhr.status);
+                            // Try next context
+                            tryDisable(ctxIndex + 1);
+                        }
+                    });
+                }
+
+                // Helper to update row UI after successful disable
+                function updateDisabledRowUI(search) {
+                    var $row = $('.metric-popup-row[data-search-name="' + escapeHtml(search.name).replace(/"/g, '\\"') + '"]');
+                    if ($row.length === 0) {
+                        $row = $('.metric-popup-row').filter(function() {
+                            return $(this).find('td:eq(1)').text().trim() === search.name;
+                        });
+                    }
+
+                    if ($row.length > 0) {
+                        var $statusCell = $row.find('.status-cell');
+                        var currentBadges = $statusCell.html() || '';
+
+                        var wasFlagged = currentBadges.indexOf('FLAGGED') > -1 ||
+                                         currentBadges.indexOf('NOTIFIED') > -1 ||
+                                         currentBadges.indexOf('EXPIRING') > -1 ||
+                                         currentBadges.indexOf('SUSPICIOUS') > -1;
+
+                        var newBadges = '';
+                        if (wasFlagged) {
+                            newBadges = '<div style="display: flex; flex-direction: column; gap: 4px;">' +
+                                '<div>' +
+                                    '<span class="status-badge flagged" style="background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;">FLAGGED</span>' +
+                                    '<span class="status-badge disabled" style="background: #dc4e41; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">DISABLED</span>' +
+                                '</div>' +
+                                '<span style="font-size: 10px; color: #f8991d; font-style: italic;">⚠ Needs unflagging</span>' +
+                            '</div>';
+                            $row.addClass('needs-unflag');
+                            $row.css({ 'background-color': 'rgba(248, 153, 29, 0.15)', 'border-left': '3px solid #f8991d' });
+                        } else {
+                            newBadges = '<span class="status-badge disabled" style="background: #dc4e41; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">DISABLED</span>';
+                            $row.css({ 'background-color': 'rgba(220, 78, 65, 0.1)', 'opacity': '0.8' });
+                        }
+
+                        $statusCell.html(newBadges);
+                        $row.css('background-color', 'rgba(220, 78, 65, 0.4)');
+                        setTimeout(function() {
+                            $row.css('background-color', wasFlagged ? 'rgba(248, 153, 29, 0.15)' : 'rgba(220, 78, 65, 0.1)');
+                        }, 1500);
+                        $row.find('.metric-row-checkbox').prop('checked', false);
+                        $row.find('td:eq(1)').css('text-decoration', 'line-through');
+                    }
+                }
+
+                // Start disable attempt
+                tryDisable(0);
+            });
+
+            // Log the action
+            logGovernanceAction('disable', selectedSearches.map(function(s) { return s.name; }).join(', '), 'admin', 'Disabled via metric modal');
+        });
+
+        // Metric popup Enable button - re-enable disabled searches
+        $(document).on('click', '#metricPopupEnable', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to enable.');
+                return;
+            }
+
+            // Filter to only disabled searches (case-insensitive)
+            var disabledSearches = selectedSearches.filter(function(s) {
+                return s.status && s.status.toLowerCase() === 'disabled';
+            });
+
+            if (disabledSearches.length === 0) {
+                alert('No disabled searches selected. Select searches with DISABLED status to enable them.');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to re-enable ' + disabledSearches.length + ' search(es)?\n\nThis will allow them to run on their schedule again.')) {
+                return;
+            }
+
+            console.log('Enabling searches:', disabledSearches);
+
+            var successCount = 0;
+            var failCount = 0;
+            var failedSearches = [];
+            var totalCount = disabledSearches.length;
+
+            // Get locale from current URL or use empty string for relative path
+            var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
+            var localePrefix = locale ? '/' + locale[1] : '';
+
+            // Helper function to try enabling a search with fallback contexts
+            // Uses Splunk REST API /enable endpoint as per documentation
+            // See: https://docs.splunk.com/Documentation/SplunkCloud/latest/RESTREF/RESTsearch
+            function tryEnableSearch(search, contexts, contextIndex, onSuccess, onAllFailed) {
+                if (contextIndex >= contexts.length) {
+                    onAllFailed();
+                    return;
+                }
+
+                var ctx = contexts[contextIndex];
+                // Use /enable endpoint as recommended by Splunk REST API documentation
+                var enableUrl = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(search.name) + '/enable';
+
+                console.log('Trying enable URL (' + (contextIndex + 1) + '/' + contexts.length + ') for ' + search.name + ':', enableUrl);
+
+                $.ajax({
+                    url: enableUrl,
+                    type: 'POST',
+                    data: {},  // No data needed for /enable endpoint
+                    success: function() {
+                        console.log('Successfully enabled:', search.name, 'using context:', ctx);
+                        onSuccess();
+                    },
+                    error: function(xhr) {
+                        console.log('Enable failed for context', ctx, 'Status:', xhr.status);
+                        // Try next context
+                        tryEnableSearch(search, contexts, contextIndex + 1, onSuccess, onAllFailed);
+                    }
+                });
+            }
+
+            // Enable each search via REST API and update lookup
+            disabledSearches.forEach(function(search, idx) {
+                // Build list of contexts to try (original, then fallbacks)
+                // Using 'nobody' for shared resources as per Splunk best practices
+                var contexts = [
+                    { owner: search.owner, app: search.app },
+                    { owner: 'nobody', app: search.app },  // Shared app context
+                    { owner: search.owner, app: 'search' },  // Default search app
+                    { owner: '-', app: search.app },  // Any owner (wildcard)
+                    { owner: '-', app: '-' }  // Any owner, any app (wildcard)
+                ];
+
+                // Remove duplicates
+                var seenContexts = {};
+                contexts = contexts.filter(function(ctx) {
+                    var key = ctx.owner + '|' + ctx.app;
+                    if (seenContexts[key]) return false;
+                    seenContexts[key] = true;
+                    return true;
+                });
+
+                console.log('Enable contexts for ' + search.name + ':', contexts);
+
+                tryEnableSearch(search, contexts, 0,
+                    // onSuccess
+                    function() {
+                        successCount++;
+
+                        // Update the lookup status from "disabled" to "enabled"
+                        var updateQuery = '| inputlookup flagged_searches_lookup | eval status=if(search_name="' + escapeString(search.name) + '", "enabled", status) | outputlookup flagged_searches_lookup';
+                        runSearch(updateQuery, function(err) {
+                            if (err) {
+                                console.error('Failed to update lookup for:', search.name, err);
+                            }
+                        });
+
+                        // Update the row's status badge to show NOTIFIED instead of DISABLED
+                        var $row = $('.metric-popup-row[data-search-name="' + escapeHtml(search.name).replace(/"/g, '\\"') + '"]');
+                        if ($row.length === 0) {
+                            $row = $('.metric-popup-row').filter(function() {
+                                return $(this).find('td:eq(1)').text().trim() === search.name;
+                            });
+                        }
+
+                        if ($row.length > 0) {
+                            var $statusCell = $row.find('.status-cell');
+                            var newBadges = '<span class="status-badge enabled" style="background: #2ea043; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">ENABLED</span>';
+                            $statusCell.html(newBadges);
+                            $row.removeClass('needs-unflag');
+                            $row.css({
+                                'background-color': '',
+                                'border-left': '',
+                                'opacity': ''
+                            });
+                            $row.find('td:eq(1)').css('text-decoration', '');
+                            $row.css('background-color', 'rgba(46, 160, 67, 0.4)');
+                            setTimeout(function() {
+                                $row.css('background-color', '');
+                            }, 1500);
+
+                            var index = parseInt($row.attr('data-index'));
+                            if (currentMetricSearches[index]) {
+                                currentMetricSearches[index].status = 'enabled';
+                            }
+                        }
+
+                        if (successCount + failCount === totalCount) {
+                            showEnableComplete(successCount, failCount, failedSearches);
+                            updateEnableButtonVisibility();
+                        }
+                    },
+                    // onAllFailed
+                    function() {
+                        console.error('All enable attempts failed for:', search.name);
+                        failCount++;
+                        failedSearches.push({
+                            name: search.name,
+                            owner: search.owner,
+                            app: search.app,
+                            status: 404,
+                            reason: 'Search not found in any context - may have been deleted or moved'
+                        });
+
+                        if (successCount + failCount === totalCount) {
+                            showEnableComplete(successCount, failCount, failedSearches);
+                            updateEnableButtonVisibility();
+                        }
+                    }
+                );
+            });
+
+            // Log the action
+            logGovernanceAction('enable', disabledSearches.map(function(s) { return s.name; }).join(', '), 'admin', 'Re-enabled via metric modal');
+        });
+
+        // Show completion message for enable action
+        function showEnableComplete(successCount, failCount, failedSearches) {
+            var $footer = $('#metricPopupOverlay .metric-popup-footer');
+            var $msg = $footer.find('.enable-message');
+            if ($msg.length === 0) {
+                $msg = $('<div class="enable-message" style="margin-right: auto; font-weight: 600;"></div>');
+                $footer.prepend($msg);
+            }
+
+            var html = '';
+            if (failCount === 0) {
+                html = '<span style="color: #5cc05c;">✓ ' + successCount + ' search(es) re-enabled</span>';
+            } else {
+                html = '<span style="color: #f8991d;">' + successCount + ' enabled, ' + failCount + ' failed</span>';
+                // Show detailed failure info
+                if (failedSearches && failedSearches.length > 0) {
+                    var failDetails = failedSearches.map(function(f) {
+                        return f.name + ': ' + f.reason;
+                    }).join('\n');
+                    console.error('Failed searches:', failDetails);
+                    // Add hover tooltip with failure details
+                    html += '<span style="margin-left: 8px; cursor: help; color: #dc4e41;" title="' + escapeHtml(failDetails) + '">ⓘ</span>';
+                }
+            }
+
+            $msg.html(html);
+            setTimeout(function() {
+                $msg.fadeOut(function() { $(this).remove(); });
+            }, 5000);
+        }
+
+        // Update Enable button visibility based on disabled searches in modal
+        function updateEnableButtonVisibility() {
+            var hasDisabled = currentMetricSearches.some(function(s) {
+                return s.status === 'disabled';
+            });
+            if (hasDisabled) {
+                $('#metricPopupEnable').show();
+            } else {
+                $('#metricPopupEnable').hide();
+            }
+        }
+
+        // Update all review-related button visibility based on search statuses
+        function updateReviewButtonsVisibility() {
+            var hasDisabled = currentMetricSearches.some(function(s) {
+                return s.status === 'disabled';
+            });
+            var hasPendingOrNotified = currentMetricSearches.some(function(s) {
+                return s.status === 'pending' || s.status === 'notified';
+            });
+            var hasReview = currentMetricSearches.some(function(s) {
+                return s.status === 'review';
+            });
+
+            // Enable button - show if any disabled
+            if (hasDisabled) {
+                $('#metricPopupEnable').show();
+            } else {
+                $('#metricPopupEnable').hide();
+            }
+
+            // Submit for Review button - show if any pending/notified (can submit remediation for review)
+            if (hasPendingOrNotified) {
+                $('#metricPopupSubmitReview').show();
+            } else {
+                $('#metricPopupSubmitReview').hide();
+            }
+
+            // Approve & Reject buttons - show if any in review status (admin actions)
+            if (hasReview) {
+                $('#metricPopupApprove').show();
+                $('#metricPopupReject').show();
+            } else {
+                $('#metricPopupApprove').hide();
+                $('#metricPopupReject').hide();
+            }
+        }
+
+        // Show completion message for disable action
+        function showDisableComplete(successCount, failCount) {
+            var $footer = $('#metricPopupOverlay .metric-popup-footer');
+            var $msg = $footer.find('.disable-message');
+            if ($msg.length === 0) {
+                $msg = $('<div class="disable-message" style="margin-right: auto; font-weight: 600;"></div>');
+                $footer.prepend($msg);
+            }
+
+            // Count items needing unflag
+            var needsUnflagCount = $('.metric-popup-row.needs-unflag').length;
+
+            var html = '';
+            if (failCount === 0) {
+                html = '<span style="color: #5cc05c;">' + successCount + ' search(es) disabled</span>';
+            } else {
+                html = '<span style="color: #f8991d;">' + successCount + ' disabled, ' + failCount + ' failed</span>';
+            }
+
+            if (needsUnflagCount > 0) {
+                html += '<br><span style="color: #f8991d; font-size: 12px;">⚠ ' + needsUnflagCount + ' flagged item(s) now need unflagging</span>';
+            }
+
+            $msg.html(html);
+
+            // Don't auto-clear if there are items needing attention
+            if (needsUnflagCount === 0) {
+                setTimeout(function() {
+                    $msg.fadeOut(function() { $(this).remove(); });
+                }, 5000);
+            }
+        }
+
+        // Metric popup Extend button
+        $(document).on('click', '#metricPopupExtend', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to extend.');
+                return;
+            }
+
+            // Close metric popup and open extend modal
+            $('#metricPopupOverlay').removeClass('active');
+            openExtendModal(selectedSearches);
+        });
+
+        // Submit for Review button - allows users to submit remediated searches for admin review
+        $(document).on('click', '#metricPopupSubmitReview', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to submit for review.');
+                return;
+            }
+
+            // Filter to only pending/notified searches (not disabled or already in review)
+            var eligibleSearches = selectedSearches.filter(function(s) {
+                return s.status === 'pending' || s.status === 'notified';
+            });
+
+            if (eligibleSearches.length === 0) {
+                alert('No eligible searches selected. Only flagged/notified searches can be submitted for review.');
+                return;
+            }
+
+            if (!confirm('Submit ' + eligibleSearches.length + ' search(es) for admin review?\n\nThis will pause the remediation timer while an admin reviews your changes.\n\nSearches:\n• ' + eligibleSearches.map(function(s) { return s.name; }).join('\n• '))) {
+                return;
+            }
+
+            submitForReview(eligibleSearches);
+        });
+
+        // Approve & Unflag button - admin action to approve reviewed searches
+        $(document).on('click', '#metricPopupApprove', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to approve.');
+                return;
+            }
+
+            // Filter to only searches in review status
+            var reviewSearches = selectedSearches.filter(function(s) {
+                return s.status === 'review';
+            });
+
+            if (reviewSearches.length === 0) {
+                alert('No searches in review status selected. Only searches pending review can be approved.');
+                return;
+            }
+
+            if (!confirm('Approve and unflag ' + reviewSearches.length + ' search(es)?\n\nThis will remove them from the flagged list.\n\nSearches:\n• ' + reviewSearches.map(function(s) { return s.name; }).join('\n• '))) {
+                return;
+            }
+
+            approveReviews(reviewSearches);
+        });
+
+        // Reject Review button - admin action to reject and reset timer
+        $(document).on('click', '#metricPopupReject', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to reject.');
+                return;
+            }
+
+            // Filter to only searches in review status
+            var reviewSearches = selectedSearches.filter(function(s) {
+                return s.status === 'review';
+            });
+
+            if (reviewSearches.length === 0) {
+                alert('No searches in review status selected. Only searches pending review can be rejected.');
+                return;
+            }
+
+            // Prompt for rejection reason
+            var reason = prompt('Enter rejection reason (will be sent to the search owner):\n\nSearches:\n• ' + reviewSearches.map(function(s) { return s.name; }).join('\n• '));
+            if (!reason) {
+                return;
+            }
+
+            rejectReviews(reviewSearches, reason);
+        });
+
+        // Submit for review function
+        function submitForReview(searches) {
+            showToast('Submitting ' + searches.length + ' search(es) for review...');
+
+            var conditions = searches.map(function(s) {
+                return 'search_name="' + escapeString(s.name) + '"';
+            }).join(' OR ');
+
+            var reviewQuery = '| inputlookup flagged_searches_lookup ' +
+                '| eval status = if(' + conditions + ', "review", status)' +
+                '| eval review_submitted_time = if(' + conditions + ', now(), review_submitted_time)' +
+                '| eval review_submitted_by = if(' + conditions + ', "' + currentUser + '", review_submitted_by)' +
+                '| eval notes = if(' + conditions + ', notes + " | SUBMITTED FOR REVIEW on " + strftime(now(), "%Y-%m-%d %H:%M") + " by ' + currentUser + '", notes)' +
+                '| outputlookup flagged_searches_lookup';
+
+            runSearch(reviewQuery, function(err) {
+                if (err) {
+                    alert('Error submitting for review: ' + err);
+                    return;
+                }
+
+                searches.forEach(function(s) {
+                    logAction('submit-review', s.name, 'Submitted for admin review by ' + currentUser);
+                });
+
+                showToast('✓ ' + searches.length + ' search(es) submitted for review');
+
+                // Refresh
+                setTimeout(function() {
+                    refreshDashboard();
+                    $('#metricPopupOverlay').removeClass('active');
+                }, 1000);
+            });
+        }
+
+        // Approve reviews function
+        function approveReviews(searches) {
+            showToast('Approving ' + searches.length + ' search(es)...');
+
+            var conditions = searches.map(function(s) {
+                return 'search_name="' + escapeString(s.name) + '"';
+            }).join(' OR ');
+
+            // Change status to "resolved" (effectively unflagging)
+            var approveQuery = '| inputlookup flagged_searches_lookup ' +
+                '| eval status = if(' + conditions + ', "resolved", status)' +
+                '| eval review_approved_time = if(' + conditions + ', now(), review_approved_time)' +
+                '| eval review_approved_by = if(' + conditions + ', "' + currentUser + '", review_approved_by)' +
+                '| eval notes = if(' + conditions + ', notes + " | APPROVED on " + strftime(now(), "%Y-%m-%d %H:%M") + " by ' + currentUser + '", notes)' +
+                '| outputlookup flagged_searches_lookup';
+
+            runSearch(approveQuery, function(err) {
+                if (err) {
+                    alert('Error approving reviews: ' + err);
+                    return;
+                }
+
+                searches.forEach(function(s) {
+                    logAction('approve-review', s.name, 'Review approved and unflagged by ' + currentUser);
+                });
+
+                showToast('✓ ' + searches.length + ' search(es) approved and unflagged');
+
+                setTimeout(function() {
+                    refreshDashboard();
+                    $('#metricPopupOverlay').removeClass('active');
+                }, 1000);
+            });
+        }
+
+        // Reject reviews function
+        function rejectReviews(searches, reason) {
+            showToast('Rejecting ' + searches.length + ' review(s)...');
+
+            var conditions = searches.map(function(s) {
+                return 'search_name="' + escapeString(s.name) + '"';
+            }).join(' OR ');
+
+            // Reset status to "notified" and extend deadline by 7 days
+            var rejectQuery = '| inputlookup flagged_searches_lookup ' +
+                '| eval status = if(' + conditions + ', "notified", status)' +
+                '| eval remediation_deadline = if(' + conditions + ', now() + (7 * 86400), remediation_deadline)' +
+                '| eval review_rejected_time = if(' + conditions + ', now(), review_rejected_time)' +
+                '| eval review_rejected_by = if(' + conditions + ', "' + currentUser + '", review_rejected_by)' +
+                '| eval notes = if(' + conditions + ', notes + " | REVIEW REJECTED on " + strftime(now(), "%Y-%m-%d %H:%M") + " by ' + currentUser + ': ' + escapeString(reason) + ' - Deadline extended 7 days", notes)' +
+                '| outputlookup flagged_searches_lookup';
+
+            runSearch(rejectQuery, function(err) {
+                if (err) {
+                    alert('Error rejecting reviews: ' + err);
+                    return;
+                }
+
+                searches.forEach(function(s) {
+                    logAction('reject-review', s.name, 'Review rejected by ' + currentUser + ': ' + reason);
+                });
+
+                showToast('✗ ' + searches.length + ' review(s) rejected - timer reset with 7 days');
+
+                setTimeout(function() {
+                    refreshDashboard();
+                    $('#metricPopupOverlay').removeClass('active');
+                }, 1000);
+            });
+        }
+
+        function getSelectedMetricSearches() {
+            var selected = [];
+            $('.metric-row-checkbox:checked').each(function() {
+                var index = parseInt($(this).attr('data-index'));
+                if (currentMetricSearches[index]) {
+                    selected.push(currentMetricSearches[index]);
+                }
+            });
+            return selected;
+        }
+
         // Flagged modal events
         $(document).on('click', '#flaggedModalClose, #flaggedModalCancel', function() {
             $('#flaggedModalOverlay').removeClass('active');
@@ -1144,7 +2086,7 @@ require([
                 }
             });
 
-            // Watch for metric popup token
+            // Watch for metric popup token (old format)
             defaultTokens.on('change:show_metric_popup', function(model, value) {
                 if (value) {
                     var metricValue = defaultTokens.get('metric_value') || '0';
@@ -1169,6 +2111,25 @@ require([
                     setTimeout(function() {
                         defaultTokens.unset('show_metric_popup');
                         defaultTokens.unset('metric_value');
+                    }, 100);
+                }
+            });
+
+            // Watch for metric popup token (new format from dashboard drilldown)
+            defaultTokens.on('change:metric_popup_type', function(model, value) {
+                if (value) {
+                    var metricValue = defaultTokens.get('metric_popup_value') || '0';
+                    var metricTitle = defaultTokens.get('metric_popup_title') || value;
+
+                    console.log("Drilldown triggered metric popup:", value, metricValue, metricTitle);
+
+                    openMetricPopup(value, metricValue, metricTitle);
+
+                    // Clear the tokens so drilldown can be triggered again
+                    setTimeout(function() {
+                        defaultTokens.unset('metric_popup_type');
+                        defaultTokens.unset('metric_popup_value');
+                        defaultTokens.unset('metric_popup_title');
                     }, 100);
                 }
             });
@@ -1637,34 +2598,53 @@ require([
     // METRIC POPUP FUNCTIONS
     // ============================================
 
+    var currentMetricSearches = [];
+
     function openMetricPopup(metricType, value, title) {
         console.log("Opening metric popup:", metricType, value, title);
+        currentMetricSearches = [];
 
         $('#metricPopupValue').text(value);
         $('#metricPopupTitle').text(title);
-        $('#metricPopupList').html('<li style="text-align: center; color: rgba(255,255,255,0.5);">Loading...</li>');
+        // Add "Time Remaining" column for flagged/expiring metrics
+        if (metricType === 'flagged' || metricType === 'expiring') {
+            $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableBody').html('<tr><td colspan="7" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        } else {
+            $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        }
         $('#metricPopupOverlay').addClass('active');
 
-        // Run search based on metric type
+        // Stop any existing countdown timer
+        if (window.countdownTimerInterval) {
+            clearInterval(window.countdownTimerInterval);
+            window.countdownTimerInterval = null;
+        }
+
+        // Store current metric type for status updates
+        window.currentMetricType = metricType;
+
+        // Run search based on metric type - using cached data with status info
         var searchQuery = '';
         switch (metricType) {
             case 'total':
-                searchQuery = '| rest /servicesNS/-/-/saved/searches splunk_server=local | search is_scheduled=1 disabled=0 | rename eai:acl.owner as owner, eai:acl.app as app | table title, owner, app, cron_schedule | head 20';
+                searchQuery = '| inputlookup governance_search_cache.csv | search disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | eval status_display=if(isnotnull(flag_status), flag_status, "active") | table title, owner, app, status_display, frequency_label, monthly_cost | head 50';
                 break;
             case 'suspicious':
-                searchQuery = '| `analyze_scheduled_searches` | search is_suspicious=1 disabled=0 | table title, owner, suspicious_reason | head 20';
+                searchQuery = '| inputlookup governance_search_cache.csv | search is_suspicious=1 disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | where isnull(flag_status) OR (flag_status!="pending" AND flag_status!="notified" AND flag_status!="disabled") | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason, monthly_cost | head 50';
                 break;
             case 'flagged':
-                searchQuery = '| inputlookup flagged_searches_lookup | search status IN ("pending", "notified") | table search_name, search_owner, status, reason | head 20';
+                searchQuery = '| inputlookup flagged_searches_lookup | search status IN ("pending", "notified", "disabled", "review") | dedup search_name | eval status_display=status | eval deadline_epoch=remediation_deadline | eval days_remaining=round((remediation_deadline - now()) / 86400, 2) | table search_name, search_owner, search_app, status_display, reason, status, deadline_epoch, days_remaining | head 50';
                 break;
-            case 'pending':
-                searchQuery = '| inputlookup flagged_searches_lookup | search status="notified" | eval days_left = round((remediation_deadline - now()) / 86400, 1) | table search_name, search_owner, days_left | head 20';
+            case 'expiring':
+                searchQuery = '| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" | dedup search_name | eval days_remaining = round((remediation_deadline - now()) / 86400, 1) | where days_remaining >= 0 AND days_remaining <= 3 | eval status_display="expiring" | table search_name, search_owner, search_app, status_display, days_remaining, reason | head 50';
                 break;
             case 'disabled':
-                searchQuery = '| inputlookup flagged_searches_lookup | search status="disabled" | where flagged_time > relative_time(now(), "-30d") | table search_name, search_owner, reason | head 20';
+                searchQuery = '| inputlookup flagged_searches_lookup | search status="disabled" | dedup search_name | eval days_ago = (now() - flagged_time) / 86400 | where days_ago <= 7 | eval status_display="disabled" | table search_name, search_owner, search_app, status_display, reason | head 50';
                 break;
             default:
-                $('#metricPopupList').html('<li>No data available</li>');
+                $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center;">No data available</td></tr>');
                 return;
         }
 
@@ -1683,30 +2663,73 @@ require([
                     var rows = results.data().rows;
                     var fields = results.data().fields;
 
+                    var colCount = (metricType === 'flagged' || metricType === 'expiring') ? 7 : 6;
                     if (!rows || rows.length === 0) {
-                        $('#metricPopupList').html('<li style="text-align: center; color: rgba(255,255,255,0.5);">No items found</li>');
+                        $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No items found</td></tr>');
                         return;
                     }
 
+                    currentMetricSearches = [];
                     var html = '';
+                    var hasFlaggedCountdown = (metricType === 'flagged' || metricType === 'expiring');
+
                     for (var i = 0; i < rows.length; i++) {
                         var row = rows[i];
                         var name = row[0] || '-';
-                        var detail = row[1] || '';
-                        if (row[2]) detail += ' | ' + row[2];
+                        var owner = row[1] || '-';
+                        var app = row[2] || '-';
+                        var statusDisplay = row[3] || 'active';
+                        var detail = row[4] || '-';
+                        var extra = row[5] || '';
+                        var deadlineEpoch = (hasFlaggedCountdown && row[6]) ? parseFloat(row[6]) : null;
+                        var daysRemaining = (hasFlaggedCountdown && row[7]) ? parseFloat(row[7]) : null;
 
-                        html += '<li class="metric-popup-item" data-search-name="' + escapeHtml(name) + '" style="cursor: pointer;" title="Click to view in Flagged panel">' +
-                            '<span class="name">' + escapeHtml(name) + '</span>' +
-                            '<span class="detail">' + escapeHtml(detail) + '</span>' +
-                            '</li>';
+                        currentMetricSearches.push({
+                            name: name,
+                            owner: owner,
+                            app: app,
+                            status: statusDisplay,
+                            deadlineEpoch: deadlineEpoch,
+                            daysRemaining: daysRemaining
+                        });
+
+                        // Create status badge(s)
+                        var statusBadge = getStatusBadges(statusDisplay);
+
+                        html += '<tr class="metric-popup-row" data-index="' + i + '" data-search-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
+                            '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
+                            '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
+                            '<td style="padding: 8px;" class="status-cell">' + statusBadge + '</td>';
+
+                        // Add countdown timer column for flagged/expiring metrics
+                        if (hasFlaggedCountdown) {
+                            html += '<td style="padding: 8px;" class="countdown-cell" data-deadline="' + (deadlineEpoch || '') + '" data-index="' + i + '">' +
+                                formatCountdownTimer(deadlineEpoch, statusDisplay) + '</td>';
+                        }
+
+                        html += '<td style="padding: 8px;">' + escapeHtml(owner) + '</td>' +
+                            '<td style="padding: 8px;">' + escapeHtml(app) + '</td>' +
+                            '<td style="padding: 8px; color: rgba(255,255,255,0.6);">' + escapeHtml(detail) + (extra ? ' | ' + escapeHtml(extra) : '') + '</td>' +
+                            '</tr>';
                     }
-                    $('#metricPopupList').html(html);
+                    $('#metricPopupTableBody').html(html);
+
+                    // Start countdown timer if this is a flagged/expiring metric
+                    if (hasFlaggedCountdown) {
+                        startCountdownTimer();
+
+                        // Check for overdue searches and prompt for auto-disable
+                        checkAndPromptOverdueSearches();
+                    }
+
+                    // Show/hide buttons based on search statuses
+                    updateReviewButtonsVisibility();
                 });
             }
         });
 
         popupSearch.on('search:error', function(err) {
-            $('#metricPopupList').html('<li style="color: #dc4e41;">Error loading data</li>');
+            $('#metricPopupTableBody').html('<tr><td colspan="5" style="text-align: center; color: #dc4e41; padding: 20px;">Error loading data</td></tr>');
         });
     }
 
@@ -1932,46 +2955,25 @@ require([
         });
     }
 
-    // Handle select all checkbox - use 'change' event
+    // Handle select all checkbox - use 'change' event (SINGLE handler - removed duplicate)
     $(document).on('change', '.gov-select-all', function(e) {
         e.stopPropagation();
+        e.stopImmediatePropagation();
 
         var $selectAll = $(this);
         var isChecked = $selectAll.prop('checked');
 
         console.log("Select-all changed, now:", isChecked);
 
-        var $table = $selectAll.closest('table');
-        $table.find('.gov-checkbox').each(function() {
-            $(this).prop('checked', isChecked);
-            // Update row visual state
-            var $row = $(this).closest('tr');
-            if (isChecked) {
-                $row.addClass('row-selected');
-            } else {
-                $row.removeClass('row-selected');
-            }
-        });
-        updateSelectedSearches();
-    });
-
-    // Handle select-all change - responds AFTER browser has toggled the checkbox
-    // Note: With appearance:checkbox, browser natively toggles on click
-    $(document).on('change', '.gov-select-all', function(e) {
-        e.stopPropagation();
-
-        var $selectAll = $(this);
-        var isChecked = $selectAll.prop('checked');
-
         // Get the table this select-all belongs to
         var $table = $selectAll.closest('table');
 
         // Update all checkboxes in this table
-        $table.find('.gov-checkbox').prop('checked', isChecked);
-
-        // Update row highlighting
-        $table.find('tr.gov-enhanced').each(function() {
-            var $row = $(this);
+        $table.find('.gov-checkbox').each(function() {
+            $(this).prop('checked', isChecked);
+            $(this).attr('data-selected', isChecked ? 'true' : 'false');
+            // Update row visual state
+            var $row = $(this).closest('tr');
             if (isChecked) {
                 $row.addClass('row-selected');
             } else {
@@ -2203,129 +3205,138 @@ require([
         loadConfiguration();
         initModals();
 
-        // Button click handlers - match by text content since IDs may not work in Splunk HTML panels
-        $(document).on('click', '.action-buttons button, .action-btn, button.btn', function(e) {
-            var btnText = $(this).text().trim().toLowerCase();
-            console.log("Button clicked:", btnText);
+        // SINGLE consolidated button handler - handles ALL action buttons
+        // Uses stopImmediatePropagation to prevent duplicate handling
+        // Checks both text content AND button ID
+        $(document).on('click', '.action-buttons button, .action-btn, button.btn, #flag-selected-btn, #flag-btn-2, #flag-this-btn, #preview-impact-btn, #preview-btn-2, #preview-this-btn, #track-search-btn, #track-btn-2, #track-this-btn, #email-owner-btn, #email-btn-2, #email-this-owner-btn, #send-reminder-btn, #extend-deadline-btn, #disable-now-btn, #disable-expiring-btn, #unflag-btn, #unflag-btn-2, #unflag-selected-btn, #unflag-this-btn, #clear-selection-btn', function(e) {
+            // IMMEDIATELY stop propagation to prevent any other handlers
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
 
-            if (btnText.indexOf('flag selected') > -1 || btnText.indexOf('flag this') > -1) {
-                e.preventDefault();
-                window.flagSelectedSearch();
-            } else if (btnText.indexOf('preview impact') > -1) {
-                e.preventDefault();
-                window.previewImpact();
-            } else if (btnText.indexOf('track') > -1) {
-                e.preventDefault();
-                window.trackSearch();
-            } else if (btnText.indexOf('email owner') > -1 || btnText.indexOf('email this') > -1) {
-                e.preventDefault();
-                window.emailOwner();
-            } else if (btnText.indexOf('send reminder') > -1) {
-                e.preventDefault();
-                window.sendReminder();
-            } else if (btnText.indexOf('extend deadline') > -1) {
-                e.preventDefault();
-                window.extendDeadline();
-            } else if (btnText.indexOf('disable expiring') > -1) {
-                e.preventDefault();
-                window.disableExpiringSoon();
-            } else if (btnText.indexOf('disable now') > -1) {
-                e.preventDefault();
-                window.disableNow();
-            } else if (btnText.indexOf('unflag') > -1 || btnText.indexOf('mark resolved') > -1) {
-                e.preventDefault();
+            var $btn = $(this);
+            var btnText = $btn.text().trim().toLowerCase();
+            var btnId = $btn.attr('id') || '';
+
+            // Prevent duplicate handling - check if already handled via data attribute
+            if ($btn.data('gov-handled')) {
+                console.log("Button already handled, skipping");
+                return;
+            }
+            $btn.data('gov-handled', true);
+            setTimeout(function() { $btn.data('gov-handled', false); }, 1000);
+
+            console.log("Button clicked:", btnText, "id:", btnId);
+
+            var handled = false;
+
+            // Check by ID first (more specific), then by text content
+            // IMPORTANT: Check for "unflag" BEFORE "flag" since "unflag" contains "flag"
+            if (btnId.indexOf('unflag') > -1 || btnText.indexOf('unflag') > -1 || btnText.indexOf('mark resolved') > -1) {
+                handled = true;
                 window.unflagSearch();
-            } else if (btnText.indexOf('clear selection') > -1) {
-                e.preventDefault();
+            } else if (btnId === 'flag-this-btn' || btnText.indexOf('flag this') > -1) {
+                // "Flag This Search" button - uses token values
+                handled = true;
+                var searchName = getToken("selected_search");
+                var owner = getToken("selected_owner");
+                var app = getToken("selected_app");
+                if (searchName) {
+                    window.flagThisSearch(searchName, owner, app);
+                } else {
+                    alert("Please select a search first.");
+                }
+            } else if (btnId.indexOf('flag') > -1 || btnText.indexOf('flag selected') > -1) {
+                handled = true;
+                window.flagSelectedSearch();
+            } else if (btnId.indexOf('preview') > -1 || btnText.indexOf('preview impact') > -1) {
+                handled = true;
+                window.previewImpact();
+            } else if (btnId.indexOf('track') > -1 || btnText.indexOf('track') > -1) {
+                handled = true;
+                window.trackSearch();
+            } else if (btnId === 'email-this-owner-btn' || btnText.indexOf('email this') > -1) {
+                // "Email This Owner" button - uses token values
+                handled = true;
+                var ownerEmail = getToken("selected_owner");
+                var searchNameEmail = getToken("selected_search");
+                if (ownerEmail && searchNameEmail) {
+                    window.emailThisOwner(ownerEmail, searchNameEmail);
+                } else {
+                    alert("Please select a search first.");
+                }
+            } else if (btnId.indexOf('email') > -1 || btnText.indexOf('email owner') > -1) {
+                handled = true;
+                window.emailOwner();
+            } else if (btnId === 'send-reminder-btn' || btnText.indexOf('send reminder') > -1) {
+                handled = true;
+                window.sendReminder();
+            } else if (btnId === 'extend-deadline-btn' || btnText.indexOf('extend deadline') > -1) {
+                handled = true;
+                window.extendDeadline();
+            } else if (btnId === 'disable-expiring-btn' || btnText.indexOf('disable expiring') > -1) {
+                handled = true;
+                window.disableExpiringSoon();
+            } else if (btnId === 'disable-now-btn' || btnText.indexOf('disable now') > -1) {
+                handled = true;
+                window.disableNow();
+            } else if (btnId === 'clear-selection-btn' || btnText.indexOf('clear selection') > -1) {
+                handled = true;
                 window.clearSelection();
-            }
-        });
-
-        // Also bind by ID as fallback
-        $(document).on('click', '#flag-selected-btn, #flag-btn-2, #flag-this-btn', function(e) {
-            e.preventDefault();
-            window.flagSelectedSearch();
-        });
-
-        $(document).on('click', '#preview-impact-btn, #preview-btn-2, #preview-this-btn', function(e) {
-            e.preventDefault();
-            window.previewImpact();
-        });
-
-        $(document).on('click', '#track-search-btn, #track-btn-2, #track-this-btn', function(e) {
-            e.preventDefault();
-            window.trackSearch();
-        });
-
-        $(document).on('click', '#email-owner-btn, #email-btn-2, #email-this-owner-btn', function(e) {
-            e.preventDefault();
-            window.emailOwner();
-        });
-
-        $(document).on('click', '#send-reminder-btn', function(e) {
-            e.preventDefault();
-            window.sendReminder();
-        });
-
-        $(document).on('click', '#extend-deadline-btn', function(e) {
-            e.preventDefault();
-            window.extendDeadline();
-        });
-
-        $(document).on('click', '#disable-now-btn', function(e) {
-            e.preventDefault();
-            window.disableNow();
-        });
-
-        $(document).on('click', '#disable-expiring-btn', function(e) {
-            e.preventDefault();
-            window.disableExpiringSoon();
-        });
-
-        $(document).on('click', '#unflag-btn, #unflag-btn-2, #unflag-selected-btn, #unflag-this-btn', function(e) {
-            e.preventDefault();
-            window.unflagSearch();
-        });
-
-        $(document).on('click', '#clear-selection-btn', function(e) {
-            e.preventDefault();
-            window.clearSelection();
-        });
-
-        // Native capture-phase listener as ultimate fallback
-        document.addEventListener('click', function(e) {
-            var target = e.target;
-            if (target.tagName === 'BUTTON' || (target.tagName === 'DIV' && target.classList.contains('action-btn'))) {
-                var text = target.textContent.trim().toLowerCase();
-                console.log("Native button click:", text);
-            }
-        }, true);
-
-        // Direct click handler for "View Flagged" buttons
-        $(document).on('click', 'button', function(e) {
-            var btnText = $(this).text().trim().toLowerCase();
-            if (btnText.indexOf('view flagged') > -1) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log("View Flagged button clicked");
+            } else if (btnText.indexOf('view flagged') > -1 || btnText.indexOf('view all flagged') > -1) {
+                handled = true;
                 openFlaggedModal();
             }
+
+            if (handled) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }
         });
 
-        // Setup click handlers for single value metric panels
-        setTimeout(function() {
-            setupMetricPanelClickHandlers();
-        }, 3000);
+        // Setup click handlers for single value metric panels - run multiple times for async rendering
+        // H3 titles load asynchronously from search results, so we need longer delays
+        setTimeout(function() { setupMetricPanelClickHandlers(); }, 2000);
+        setTimeout(function() { setupMetricPanelClickHandlers(); }, 4000);
+        setTimeout(function() { setupMetricPanelClickHandlers(); }, 6000);
+        setTimeout(function() { setupMetricPanelClickHandlers(); }, 8000);
+        setTimeout(function() { setupMetricPanelClickHandlers(); }, 10000);
 
-        // Re-setup after more time for slow renders
-        setTimeout(function() {
-            setupMetricPanelClickHandlers();
-        }, 5000);
+        // Direct click handler on single value viz elements as fallback
+        $(document).on('click', '.single-result, .single-value, .viz-single-value', function(e) {
+            var $viz = $(this);
+            // Use .dashboard-element.single which is the actual parent in Splunk's DOM structure
+            var $panel = $viz.closest('.dashboard-element.single, .dashboard-element, .dashboard-cell, .dashboard-panel');
+            var metricType = $panel.attr('data-metric-type');
+
+            if (!metricType) {
+                // Try to find from title - look for h3 in panel-head or directly
+                var title = $panel.find('.panel-head h3').first().text().trim().toLowerCase();
+                if (!title) {
+                    title = $panel.find('h3').first().text().trim().toLowerCase();
+                }
+                if (title.indexOf('total') > -1) metricType = 'total';
+                else if (title.indexOf('suspicious') > -1 || title.indexOf('unflagged') > -1) metricType = 'suspicious';
+                else if (title.indexOf('flagged') > -1) metricType = 'flagged';
+                else if (title.indexOf('expiring') > -1) metricType = 'expiring';
+                else if (title.indexOf('disabled') > -1) metricType = 'disabled';
+            }
+
+            if (metricType) {
+                e.preventDefault();
+                e.stopPropagation();
+                var value = $viz.text().trim() || '0';
+                var displayTitle = $panel.find('.panel-title, h2, h3').first().text().trim();
+                console.log("Single value clicked:", metricType, value, displayTitle);
+                openMetricPopup(metricType, value, displayTitle);
+            }
+        });
 
         function setupMetricPanelClickHandlers() {
             console.log("Setting up metric panel click handlers");
 
-            // Map of panel titles to metric types - must match dashboard titles exactly
+            // Map of panel titles to metric types - matches dashboard titles
             var metricMap = {
                 'Total Scheduled Searches': 'total',
                 'Suspicious (Unflagged)': 'suspicious',
@@ -2337,40 +3348,79 @@ require([
                 'Auto-Disabled': 'disabled'
             };
 
+            // Alternative partial matches for flexibility
+            var partialMatches = {
+                'total': ['total scheduled', 'scheduled searches'],
+                'suspicious': ['suspicious', 'unflagged'],
+                'flagged': ['flagged', 'currently flagged'],
+                'expiring': ['expiring', 'days'],
+                'disabled': ['disabled', 'auto-disabled']
+            };
+
             // Find all panels with single value visualizations
-            $('.dashboard-row .dashboard-cell, .dashboard-panel').each(function() {
+            // Target .dashboard-element.single which contains the metric panels
+            $('.dashboard-element.single, .dashboard-row .dashboard-cell, .dashboard-panel').each(function() {
                 var $panel = $(this);
 
                 // Skip if already setup
                 if ($panel.attr('data-metric-setup') === 'true') return;
 
+                // Check if this has a single value viz first
+                var hasSingleViz = $panel.find('.single-result, .single-value, .viz-single-value').length > 0;
+                if (!hasSingleViz) return;
+
                 // Try multiple ways to find the title
                 var titleText = '';
-                var $titleEl = $panel.find('.panel-title').first();
+
+                // Look for h3 in panel-head first (Splunk's actual structure)
+                var $titleEl = $panel.find('.panel-head h3').first();
                 if ($titleEl.length) {
                     titleText = $titleEl.text().trim();
                 }
+                // Try any h3 as fallback
                 if (!titleText) {
-                    $titleEl = $panel.find('h2, h3').first();
-                    titleText = $titleEl.text().trim();
+                    $titleEl = $panel.find('h3').first();
+                    if ($titleEl.length) {
+                        titleText = $titleEl.text().trim();
+                    }
                 }
                 if (!titleText) {
-                    $titleEl = $panel.find('[data-title]');
-                    titleText = $titleEl.attr('data-title') || '';
+                    $titleEl = $panel.find('.panel-title').first();
+                    if ($titleEl.length) {
+                        titleText = $titleEl.text().trim();
+                    }
+                }
+                if (!titleText) {
+                    $titleEl = $panel.find('h2').first();
+                    if ($titleEl.length) {
+                        titleText = $titleEl.text().trim();
+                    }
                 }
 
-                // Check if this has a single value viz
-                var hasSingleViz = $panel.find('.single-result, .single-value, .viz-single-value, [data-view="splunkjs/mvc/simplexml/element/single"]').length > 0;
-                if (!hasSingleViz) return;
+                // Skip if no title found
+                if (!titleText) return;
 
-                console.log("Found single value panel:", titleText);
-
-                // Find matching metric type
+                // Find matching metric type - try exact match first
                 var metricType = null;
+                var titleLower = titleText.toLowerCase();
                 for (var key in metricMap) {
                     if (titleText.indexOf(key) > -1) {
                         metricType = metricMap[key];
                         break;
+                    }
+                }
+
+                // Try partial matches if no exact match
+                if (!metricType) {
+                    for (var type in partialMatches) {
+                        var patterns = partialMatches[type];
+                        for (var i = 0; i < patterns.length; i++) {
+                            if (titleLower.indexOf(patterns[i]) > -1) {
+                                metricType = type;
+                                break;
+                            }
+                        }
+                        if (metricType) break;
                     }
                 }
 

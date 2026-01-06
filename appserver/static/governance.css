@@ -1,6 +1,29 @@
 /*
  * Governance Dashboard Styles
+ * Minimal Dark Theme Enhancements v2.0
+ * Works with Splunk's native theme="dark"
  */
+
+/* ================================================
+   CUSTOM SCROLLBAR (subtle enhancement)
+   ================================================ */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
 
 /* Action buttons container */
 .action-buttons {
@@ -57,10 +80,29 @@
     margin-bottom: 20px;
 }
 
-.panel-title {
+.panel-title,
+.dashboard-panel h2,
+.dashboard-panel .panel-head,
+.dashboard-panel .panel-head h2,
+.dashboard-panel .panel-head .panel-title {
+    text-align: left !important;
+    margin-left: 0 !important;
+    padding-left: 10px !important;
     font-size: 16px;
     font-weight: 600;
     color: #ffffff;
+}
+
+/* Ensure Splunk panel headers are left-aligned */
+.panel-head {
+    text-align: left !important;
+    justify-content: flex-start !important;
+}
+
+.panel-head h2,
+.panel-head .panel-title {
+    text-align: left !important;
+    margin-left: 0 !important;
 }
 
 /* Table row hover effect */
@@ -1013,6 +1055,44 @@ tr:has(.gov-checkbox:checked) td {
     padding: 10px 30px;
 }
 
+/* Metric Popup Table Styles */
+.metric-popup-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.metric-popup-table th {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.metric-popup-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+}
+
+.metric-popup-table tr:hover {
+    background: rgba(0, 212, 255, 0.1);
+}
+
+.metric-popup-table input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.metric-popup-row.selected {
+    background: rgba(0, 212, 255, 0.15);
+}
+
 /* ============================================
    Cron Impact Preview Styles
    ============================================ */
@@ -1305,4 +1385,53 @@ tr:has(.gov-checkbox:checked) td {
 
 .dashboard-panel:has(.single-value):hover .single-value {
     box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+}
+
+/* ============================================
+   Countdown Timer Styles
+   ============================================ */
+
+/* Countdown pulse animation */
+@keyframes countdownPulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Countdown cell styling */
+.countdown-cell {
+    min-width: 140px;
+    text-align: center;
+}
+
+.countdown-critical {
+    animation: countdownPulse 0.5s ease-in-out infinite;
+    text-shadow: 0 0 8px rgba(220, 78, 65, 0.5);
+}
+
+.countdown-urgent {
+    animation: countdownPulse 1s ease-in-out infinite;
+    text-shadow: 0 0 6px rgba(248, 190, 52, 0.4);
+}
+
+.countdown-overdue {
+    animation: countdownPulse 1s ease-in-out infinite;
+    text-shadow: 0 0 10px rgba(220, 78, 65, 0.6);
+}
+
+.countdown-warning {
+    text-shadow: 0 0 4px rgba(241, 129, 63, 0.3);
+}
+
+.countdown-normal {
+    text-shadow: 0 0 4px rgba(83, 160, 81, 0.3);
 }
