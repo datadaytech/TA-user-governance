@@ -15,8 +15,12 @@ This app provides administrators with comprehensive visibility into scheduled se
   - Long average runtime (default: >5 minutes)
   - Wasteful SPL patterns (`index=*`, `| join`, `| append`, `| transaction`, long time ranges)
 - **Flagging Workflow**: Flag searches with reason, automatic deadline tracking
+- **Real-time Countdown Timer**: Color-coded countdown showing time remaining until enforcement
+- **Automated Review Detection**: System detects when users fix flagged searches and queues for admin approval
+- **Review Workflow**: Admin approve/reject process for remediated searches
 - **Email Notifications**: Notify search owners when flagged, reminded, or disabled
 - **Automated Enforcement**: Auto-disable searches that exceed remediation deadline
+- **Dark Theme Support**: Full dark theme integration with Splunk
 - **Audit Logging**: Complete audit trail of all governance actions
 - **RBAC**: Restricted to `admin` and `sc_admin` roles
 
@@ -105,6 +109,33 @@ The dashboard provides:
 - **Disable Now**: Immediately disable the search and notify owner
 - **Unflag / Mark Resolved**: Remove the flag when issue is resolved
 
+### Review Workflow
+
+When a user remediates a flagged search (changes cron, reduces runtime, etc.), the system automatically detects the fix and marks it for admin review:
+
+1. **Automated Detection**: System checks every 10 minutes for searches that are no longer suspicious
+2. **Status Changes**: Search status changes from `notified` to `review` (purple badge)
+3. **Timer Pauses**: Countdown timer shows "Under Review" instead of counting down
+4. **Admin Action Required**: Admin sees "Approve & Unflag" and "Reject Review" buttons
+   - **Approve**: Removes search from flagged list (remediation complete)
+   - **Reject**: Resets timer, returns to `notified` status
+
+See [docs/REVIEW_WORKFLOW.md](docs/REVIEW_WORKFLOW.md) for detailed documentation.
+
+### Countdown Timer
+
+The flagged searches popup displays real-time countdown timers with color-coded urgency:
+
+| Time Remaining | Color | Meaning |
+|----------------|-------|---------|
+| > 5 days | Green | Plenty of time |
+| 2-5 days | Yellow | Getting close |
+| 1-2 days | Orange | Time running out |
+| < 24 hours | Red | Critical |
+| Past deadline | Red (pulsing) | OVERDUE |
+
+See [docs/COUNTDOWN_TIMER.md](docs/COUNTDOWN_TIMER.md) for detailed documentation.
+
 ### Settings Dashboard
 
 Access via **Apps > User Governance > Governance Settings**
@@ -175,7 +206,23 @@ For issues and feature requests, please open an issue in the repository.
 
 MIT License - See LICENSE file for details.
 
+## Documentation
+
+- [Review Workflow](docs/REVIEW_WORKFLOW.md) - Automated remediation detection and admin approval process
+- [Countdown Timer](docs/COUNTDOWN_TIMER.md) - Real-time countdown with color-coded urgency
+- [Data Storage & Audit Guide](docs/DATA_STORAGE_AUDIT.md) - CSV lookup storage, audit queries, and data management
+
 ## Version History
+
+### 1.8.7
+- Added automated review detection for remediated searches
+- Added review workflow with admin approve/reject buttons
+- Added real-time countdown timer with color-coded urgency
+- Added overdue search detection with banner alerts
+- Added "Under Review" status with purple badge
+- Added dark theme support (`supported_themes = light,dark`)
+- Fixed panel title visibility on Scheduled Search Governance page
+- Added comprehensive unit tests (57 tests) and Playwright tests (7 tests)
 
 ### 1.0.0
 - Initial release

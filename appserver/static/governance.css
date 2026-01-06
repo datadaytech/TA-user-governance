@@ -80,29 +80,76 @@
     margin-bottom: 20px;
 }
 
+/* ============================================
+   Panel Title Styling - Ensure Visibility
+   ============================================ */
+
+/* Force panel titles to be visible */
 .panel-title,
 .dashboard-panel h2,
 .dashboard-panel .panel-head,
 .dashboard-panel .panel-head h2,
-.dashboard-panel .panel-head .panel-title {
+.dashboard-panel .panel-head .panel-title,
+.dashboard-panel h3.panel-title,
+.single-value h3,
+.viz-single-value h3,
+.dashboard-cell h2,
+.dashboard-cell h3 {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     text-align: left !important;
     margin-left: 0 !important;
     padding-left: 10px !important;
-    font-size: 16px;
-    font-weight: 600;
-    color: #ffffff;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
 }
 
-/* Ensure Splunk panel headers are left-aligned */
+/* Ensure Splunk panel headers are left-aligned and visible */
 .panel-head {
+    display: block !important;
+    visibility: visible !important;
     text-align: left !important;
     justify-content: flex-start !important;
+    min-height: 30px !important;
 }
 
 .panel-head h2,
+.panel-head h3,
 .panel-head .panel-title {
+    display: block !important;
+    visibility: visible !important;
     text-align: left !important;
     margin-left: 0 !important;
+    color: #ffffff !important;
+}
+
+/* Single value panel titles */
+.single-value .single-value-header,
+.viz-single-value-container h3,
+.single-value-viz h3 {
+    display: block !important;
+    visibility: visible !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
+    padding: 8px 10px !important;
+    margin-bottom: 5px !important;
+}
+
+/* Table panel titles */
+.table-container h2,
+.table-container h3,
+.table-container .panel-title {
+    display: block !important;
+    visibility: visible !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
+    padding: 10px !important;
 }
 
 /* Table row hover effect */
