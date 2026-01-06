@@ -654,6 +654,65 @@ require([
         });
     };
 
+    // Disable all flagged searches expiring within 3 days
+    window.disableExpiringSoon = function() {
+        console.log("disableExpiringSoon called");
+
+        // Get flagged searches expiring within 3 days
+        var searchQuery = '| inputlookup flagged_searches_lookup ' +
+            '| search status IN ("pending", "notified") ' +
+            '| eval days_remaining = round((remediation_deadline - now()) / 86400, 1) ' +
+            '| where days_remaining >= 0 AND days_remaining <= 3 ' +
+            '| table search_name, search_owner, days_remaining';
+
+        runSearch(searchQuery, function(err, results) {
+            if (err) {
+                alert("Error finding expiring searches: " + err);
+                return;
+            }
+
+            if (!results || results.length === 0) {
+                alert("No flagged searches are expiring within 3 days.");
+                return;
+            }
+
+            var searchList = results.map(function(r) {
+                return "• " + r.search_name + " (" + r.days_remaining + " days left)";
+            }).join("\n");
+
+            var msg = results.length === 1
+                ? "Disable the following search that is expiring soon?\n\n" + searchList
+                : "Disable " + results.length + " searches that are expiring soon?\n\n" + searchList;
+
+            if (!confirm(msg + "\n\nThis will prevent these searches from running until manually re-enabled.")) {
+                return;
+            }
+
+            // Build condition for all expiring searches
+            var conditions = results.map(function(r) {
+                return 'search_name="' + escapeString(r.search_name) + '"';
+            }).join(' OR ');
+
+            var disableQuery = '| inputlookup flagged_searches_lookup ' +
+                '| eval status = if(' + conditions + ', "disabled", status)' +
+                '| outputlookup flagged_searches_lookup';
+
+            showToast("Disabling " + results.length + " expiring search(es)...");
+
+            runSearch(disableQuery, function(disableErr) {
+                if (disableErr) {
+                    alert("Error disabling searches: " + disableErr);
+                } else {
+                    results.forEach(function(r) {
+                        logAction("disabled", r.search_name, "Auto-disabled by " + currentUser + " (was expiring in " + r.days_remaining + " days)");
+                    });
+                    showToast("✓ " + results.length + " expiring search(es) have been disabled");
+                    refreshDashboard();
+                }
+            });
+        });
+    };
+
     window.unflagSearch = function() {
         console.log("unflagSearch called");
 
@@ -1731,6 +1790,10 @@ require([
             var panelTitle = $panel.find('.panel-title, .panel-head h3, h3').first().text().trim();
             var isFlaggedPanel = panelTitle.indexOf('Flagged') > -1 && panelTitle.indexOf('Pending') > -1;
             var isSuspiciousPanel = panelTitle.indexOf('Suspicious') > -1;
+            var isCostPanel = panelTitle.indexOf('Highest Cost') > -1 || panelTitle.indexOf('Cost Impact') > -1;
+
+            // Skip checkbox enhancement for cost-only panels
+            var skipCheckboxes = isCostPanel;
 
             var scheduleColIndex = -1;
             var searchNameColIndex = -1;
@@ -1759,9 +1822,9 @@ require([
                 searchNameColIndex = dashboardColIndex;
             }
 
-            // Add checkbox header if not present
+            // Add checkbox header if not present (skip for cost-only panels)
             var $thead = $table.find('thead tr').first();
-            if ($thead.length && !$thead.find('.gov-select-header').length) {
+            if (!skipCheckboxes && $thead.length && !$thead.find('.gov-select-header').length) {
                 var $firstTh = $thead.find('th').first();
                 var checkboxHeader = '<th class="gov-select-header" style="width: 40px !important; min-width: 40px !important; text-align: center !important; padding: 8px !important;"><input type="checkbox" class="gov-select-all" style="width: 18px; height: 18px; cursor: pointer;"></th>';
                 if ($firstTh.text().trim().match(/^\d*$/)) {
@@ -1818,8 +1881,8 @@ require([
                     $row.addClass('row-flagged');
                 }
 
-                // Add checkbox cell
-                if (!$row.find('.gov-checkbox').length) {
+                // Add checkbox cell (skip for cost-only panels)
+                if (!skipCheckboxes && !$row.find('.gov-checkbox').length) {
                     var checkboxCell = '<td class="gov-checkbox-cell" style="width: 40px !important; text-align: center !important; padding: 8px !important; vertical-align: middle !important;">' +
                         '<input type="checkbox" class="gov-checkbox" ' +
                         'data-search="' + escapeHtml(searchName) + '" ' +
@@ -2163,6 +2226,9 @@ require([
             } else if (btnText.indexOf('extend deadline') > -1) {
                 e.preventDefault();
                 window.extendDeadline();
+            } else if (btnText.indexOf('disable expiring') > -1) {
+                e.preventDefault();
+                window.disableExpiringSoon();
             } else if (btnText.indexOf('disable now') > -1) {
                 e.preventDefault();
                 window.disableNow();
@@ -2211,7 +2277,12 @@ require([
             window.disableNow();
         });
 
-        $(document).on('click', '#unflag-btn', function(e) {
+        $(document).on('click', '#disable-expiring-btn', function(e) {
+            e.preventDefault();
+            window.disableExpiringSoon();
+        });
+
+        $(document).on('click', '#unflag-btn, #unflag-btn-2, #unflag-selected-btn, #unflag-this-btn', function(e) {
             e.preventDefault();
             window.unflagSearch();
         });
@@ -2254,12 +2325,15 @@ require([
         function setupMetricPanelClickHandlers() {
             console.log("Setting up metric panel click handlers");
 
-            // Map of panel titles to metric types
+            // Map of panel titles to metric types - must match dashboard titles exactly
             var metricMap = {
                 'Total Scheduled Searches': 'total',
+                'Suspicious (Unflagged)': 'suspicious',
                 'Suspicious Searches': 'suspicious',
                 'Currently Flagged': 'flagged',
+                'Expiring Soon': 'expiring',
                 'Pending Remediation': 'pending',
+                'Auto-Disabled (This Period)': 'disabled',
                 'Auto-Disabled': 'disabled'
             };
 
@@ -2328,8 +2402,8 @@ require([
 
                     console.log("Metric panel clicked:", type, value, title);
 
-                    // For flagged, open the flagged modal instead
-                    if (type === 'flagged') {
+                    // For flagged or expiring, open the flagged modal
+                    if (type === 'flagged' || type === 'expiring') {
                         openFlaggedModal();
                     } else {
                         openMetricPopup(type, value, title);
@@ -2367,3 +2441,45 @@ require([
     console.log("TA-user-governance: Script loaded");
 
 });
+
+// Global fallback for onclick handlers - these are set outside require() for immediate availability
+(function() {
+    // Fallback viewFlaggedSearches if not already defined
+    if (typeof window.viewFlaggedSearches !== 'function') {
+        window.viewFlaggedSearches = function() {
+            console.log("viewFlaggedSearches fallback called");
+            // Wait for the real function to be available
+            var checkInterval = setInterval(function() {
+                if (typeof window.openFlaggedModal === 'function') {
+                    clearInterval(checkInterval);
+                    window.openFlaggedModal();
+                }
+            }, 100);
+            // Timeout after 3 seconds
+            setTimeout(function() {
+                clearInterval(checkInterval);
+                if (typeof window.openFlaggedModal !== 'function') {
+                    alert("Loading... please try again in a moment.");
+                }
+            }, 3000);
+        };
+    }
+
+    // Click delegation for View Flagged buttons (fallback)
+    document.addEventListener('click', function(e) {
+        var target = e.target;
+        if (target.tagName === 'BUTTON' || (target.tagName === 'A' && target.classList.contains('btn'))) {
+            var text = target.textContent.toLowerCase();
+            if (text.indexOf('view') > -1 && text.indexOf('flagged') > -1) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("View Flagged button clicked (native handler)");
+                if (typeof window.openFlaggedModal === 'function') {
+                    window.openFlaggedModal();
+                } else if (typeof window.viewFlaggedSearches === 'function') {
+                    window.viewFlaggedSearches();
+                }
+            }
+        }
+    }, true);
+})();

@@ -1,0 +1,21 @@
+search_name,avg_svc_per_run,svc_category,is_expensive
+"Daily Security Summary",18,normal,0
+"Hourly Index Health Check",22,normal,0
+"User Login Analysis",25,normal,0
+"Error Log Monitor",15,normal,0
+"Weekly Compliance Report",30,normal,0
+"Real-time Alert Dashboard",95,expensive,1
+"Full Index Scan Report",110,expensive,1
+"Historical Data Analysis",85,expensive,1
+"Cross-Index Correlation",120,expensive,1
+"Every 5min CPU Monitor",88,expensive,1
+"Minute-by-Minute Logs",105,expensive,1
+"Large Timerange Stats",92,expensive,1
+"Transaction Tracking",78,expensive,1
+"Network Flow Analysis",115,expensive,1
+"Authentication Audit",20,normal,0
+"App Performance Monitor",23,normal,0
+"Disk Usage Tracker",17,normal,0
+"Backup Status Check",19,normal,0
+"Service Health Dashboard",24,normal,0
+"Database Query Analysis",28,normal,0

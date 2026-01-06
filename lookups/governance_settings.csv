@@ -5,3 +5,6 @@ high_frequency_threshold,900,Minimum seconds between runs to flag as high freque
 long_runtime_threshold,300,Runtime in seconds to flag as long running
 remediation_days,7,Days allowed for remediation before auto-disable
 admin_email,splunk-admins@example.com,Admin team notification email
+svc_unit_cost,1600,Cost per SVC in dollars
+svc_purchased,10000,Monthly SVCs purchased
+licensing_model,workload,Licensing model (workload or ingest)

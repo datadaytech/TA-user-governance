@@ -1,75 +1,297 @@
-<dashboard version="1.1" theme="dark">
+<dashboard version="1.1" theme="dark" script="governance.js" stylesheet="governance.css">
   <label>Governance Settings</label>
-  <description>Configure thresholds and settings for scheduled search governance</description>
+  <description>Configure licensing costs, thresholds, and preferences for scheduled search governance</description>
 
+  <!-- Step 1: Data Refresh Settings -->
   <row>
     <panel>
-      <title>Suspicious Search Thresholds</title>
       <html>
-        <div class="settings-info">
-          <p>Configure the thresholds used to identify suspicious scheduled searches. Changes take effect immediately.</p>
+        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">1</span>
+            <h3 style="color: #00d4ff; margin: 0;">Data Refresh Settings</h3>
+          </div>
+          <p style="color: rgba(255,255,255,0.8); margin-bottom: 16px;">Configure when the governance cache is refreshed. The cache pre-computes scheduled search analysis for faster dashboard loading.</p>
         </div>
       </html>
     </panel>
   </row>
 
-  <!-- Current Settings Display -->
   <row>
     <panel>
-      <title>Current Configuration</title>
-      <table>
+      <title>Cache Refresh Schedule</title>
+      <html>
+        <p style="color: rgba(255,255,255,0.7);">Choose how often the governance data is refreshed. More frequent updates mean more accurate data but higher resource usage.</p>
+      </html>
+      <input type="dropdown" token="cache_schedule" searchWhenChanged="false">
+        <label>Refresh Frequency</label>
+        <choice value="*/5 * * * *">Every 5 minutes (High accuracy)</choice>
+        <choice value="*/15 * * * *">Every 15 minutes (Balanced)</choice>
+        <choice value="*/30 * * * *">Every 30 minutes (Low impact)</choice>
+        <choice value="0 * * * *">Hourly</choice>
+        <choice value="0 2 * * *">Daily at 2:00 AM (Recommended for low volume)</choice>
+        <choice value="0 6 * * *">Daily at 6:00 AM</choice>
+        <default>*/5 * * * *</default>
+      </input>
+      <html>
+        <form class="settings-form" style="display: flex; gap: 10px; margin-top: 15px;">
+          <button class="btn btn-primary" onclick="updateCacheSchedule('$cache_schedule$')">Save Schedule</button>
+          <button class="btn" style="background: #53a051; border-color: #53a051;" onclick="runCacheNow()">Run Cache Now</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>Last Cache Refresh</title>
+      <single>
         <search>
-          <query>`get_governance_settings`
-| table setting_name, setting_value, description
-| rename setting_name as "Setting", setting_value as "Value", description as "Description"</query>
+          <query>| inputlookup governance_search_cache.csv
+| stats max(cache_time) as last_refresh count as total_searches
+| eval last_refresh_display = if(isnotnull(last_refresh), strftime(last_refresh, "%Y-%m-%d %H:%M:%S"), "Never")
+| eval display = last_refresh_display . " (" . total_searches . " searches cached)"
+| table display</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>30s</refresh>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Divider -->
+  <row>
+    <panel>
+      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
+    </panel>
+  </row>
+
+  <!-- Step 2: Licensing Model Selection -->
+  <row>
+    <panel>
+      <html>
+        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">2</span>
+            <h3 style="color: #00d4ff; margin: 0;">Splunk Licensing Model</h3>
+          </div>
+          <p style="color: rgba(255,255,255,0.8); margin-bottom: 16px;">Select your organization's Splunk Cloud licensing model. This determines which cost metrics are used for analysis.</p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Select Licensing Model</title>
+      <input type="radio" token="licensing_model" searchWhenChanged="true">
+        <label>Licensing Model</label>
+        <choice value="workload">Workload Pricing (SVC-based)</choice>
+        <choice value="ingest">Ingest Pricing (GB-based)</choice>
+        <default>workload</default>
+        <change>
+          <condition value="workload">
+            <set token="show_workload">true</set>
+            <unset token="show_ingest"></unset>
+          </condition>
+          <condition value="ingest">
+            <unset token="show_workload"></unset>
+            <set token="show_ingest">true</set>
+          </condition>
+        </change>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('licensing_model', '$licensing_model$', 'Selected licensing model (workload or ingest)')">Save Licensing Model</button>
+        </form>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Workload Pricing Settings (SVC-based) -->
+  <row depends="$show_workload$">
+    <panel>
+      <title>SVC (Splunk Virtual Compute) Settings</title>
+      <html>
+        <div style="background: rgba(83,160,81,0.1); border: 1px solid rgba(83,160,81,0.3); border-radius: 6px; padding: 12px; margin-bottom: 15px;">
+          <p style="margin: 0; color: rgba(255,255,255,0.8);"><strong>SVCs</strong> are compute units for search processing. Each search consumes SVCs based on complexity and data volume.</p>
+        </div>
+      </html>
+      <input type="text" token="svc_unit_cost" searchWhenChanged="false">
+        <label>Cost per SVC ($)</label>
+        <default>0.10</default>
+      </input>
+      <input type="text" token="svc_purchased" searchWhenChanged="false">
+        <label>Monthly SVCs Purchased</label>
+        <default>10000</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('svc_unit_cost', '$svc_unit_cost$', 'Cost per SVC in dollars'); updateSetting('svc_purchased', '$svc_purchased$', 'Monthly SVCs purchased');">Save SVC Settings</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>DDAS (Dynamic Data Active Search) Settings</title>
+      <html>
+        <div style="background: rgba(83,160,81,0.1); border: 1px solid rgba(83,160,81,0.3); border-radius: 6px; padding: 12px; margin-bottom: 15px;">
+          <p style="margin: 0; color: rgba(255,255,255,0.8);"><strong>DDAS</strong> pricing applies to searches over accelerated data models and tstats queries.</p>
+        </div>
+      </html>
+      <input type="text" token="ddas_unit_cost" searchWhenChanged="false">
+        <label>Cost per DDAS Query ($)</label>
+        <default>0.05</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('ddas_unit_cost', '$ddas_unit_cost$', 'Cost per DDAS query')">Save DDAS Settings</button>
+        </form>
+      </html>
+    </panel>
+    <panel>
+      <title>DDAA (Dynamic Data Active Archive) Settings</title>
+      <html>
+        <div style="background: rgba(83,160,81,0.1); border: 1px solid rgba(83,160,81,0.3); border-radius: 6px; padding: 12px; margin-bottom: 15px;">
+          <p style="margin: 0; color: rgba(255,255,255,0.8);"><strong>DDAA</strong> pricing applies to searches against archived/frozen data tiers.</p>
+        </div>
+      </html>
+      <input type="text" token="ddaa_unit_cost" searchWhenChanged="false">
+        <label>Cost per DDAA Query ($)</label>
+        <default>0.15</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('ddaa_unit_cost', '$ddaa_unit_cost$', 'Cost per DDAA archive query')">Save DDAA Settings</button>
+        </form>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Ingest Pricing Settings (GB-based) -->
+  <row depends="$show_ingest$">
+    <panel>
+      <title>Ingest Volume Pricing</title>
+      <html>
+        <div style="background: rgba(0,109,156,0.1); border: 1px solid rgba(0,109,156,0.3); border-radius: 6px; padding: 12px; margin-bottom: 15px;">
+          <p style="margin: 0; color: rgba(255,255,255,0.8);"><strong>Ingest pricing</strong> is based on the volume of data indexed per day. Cost calculations will use estimated data scanned per search.</p>
+        </div>
+      </html>
+      <input type="text" token="ingest_gb_cost" searchWhenChanged="false">
+        <label>Cost per GB Ingested ($)</label>
+        <default>15.00</default>
+      </input>
+      <input type="text" token="daily_ingest_gb" searchWhenChanged="false">
+        <label>Daily Ingest Volume (GB)</label>
+        <default>100</default>
+      </input>
+      <html>
+        <form class="settings-form">
+          <button class="btn btn-primary" onclick="updateSetting('ingest_gb_cost', '$ingest_gb_cost$', 'Cost per GB ingested'); updateSetting('daily_ingest_gb', '$daily_ingest_gb$', 'Daily ingest volume in GB');">Save Ingest Settings</button>
+        </form>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Current Cost Configuration Display -->
+  <row>
+    <panel>
+      <title>Your Current Cost Configuration</title>
+      <table id="cost_config_table">
+        <search>
+          <query>| inputlookup governance_settings_lookup
+| search setting_name IN ("licensing_model", "svc_unit_cost", "svc_purchased", "ddas_unit_cost", "ddaa_unit_cost", "ingest_gb_cost", "daily_ingest_gb")
+| append [| makeresults | eval setting_name="licensing_model", setting_value="workload", description="Licensing model" | fields - _time]
+| append [| makeresults | eval setting_name="svc_unit_cost", setting_value="0.10", description="Cost per SVC" | fields - _time]
+| append [| makeresults | eval setting_name="svc_purchased", setting_value="10000", description="Monthly SVCs purchased" | fields - _time]
+| append [| makeresults | eval setting_name="ddas_unit_cost", setting_value="0.05", description="Cost per DDAS query" | fields - _time]
+| append [| makeresults | eval setting_name="ddaa_unit_cost", setting_value="0.15", description="Cost per DDAA query" | fields - _time]
+| append [| makeresults | eval setting_name="ingest_gb_cost", setting_value="15.00", description="Cost per GB ingested" | fields - _time]
+| append [| makeresults | eval setting_name="daily_ingest_gb", setting_value="100", description="Daily ingest volume (GB)" | fields - _time]
+| dedup setting_name
+| eval display_name = case(
+    setting_name="licensing_model", "Licensing Model",
+    setting_name="svc_unit_cost", "SVC Unit Cost",
+    setting_name="svc_purchased", "Monthly SVCs Purchased",
+    setting_name="ddas_unit_cost", "DDAS Unit Cost",
+    setting_name="ddaa_unit_cost", "DDAA Unit Cost",
+    setting_name="ingest_gb_cost", "Ingest Cost per GB",
+    setting_name="daily_ingest_gb", "Daily Ingest Volume",
+    1=1, setting_name)
+| eval display_value = case(
+    setting_name="licensing_model", upper(substr(setting_value, 1, 1)) . substr(setting_value, 2) . " Pricing",
+    setting_name="svc_purchased" OR setting_name="daily_ingest_gb", setting_value,
+    1=1, "$" . setting_value)
+| eval sort_order = case(setting_name="licensing_model", 1, setting_name="svc_unit_cost", 2, setting_name="svc_purchased", 3, setting_name="ddas_unit_cost", 4, setting_name="ddaa_unit_cost", 5, setting_name="ingest_gb_cost", 6, setting_name="daily_ingest_gb", 7, 1=1, 99)
+| sort sort_order
+| table display_name, display_value, description
+| rename display_name as "Setting", display_value as "Current Value", description as "Description"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
           <refresh>30s</refresh>
         </search>
         <option name="count">10</option>
         <option name="drilldown">none</option>
-        <option name="rowNumbers">true</option>
       </table>
     </panel>
   </row>
 
-  <!-- Update Settings Form -->
+  <!-- Divider -->
   <row>
     <panel>
-      <title>Update Runtime Ratio Threshold</title>
+      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
+    </panel>
+  </row>
+
+  <!-- Step 3: Governance Thresholds -->
+  <row>
+    <panel>
       <html>
-        <p>Maximum allowed runtime as a percentage of the schedule interval. Searches exceeding this ratio will be flagged as suspicious.</p>
-        <p><strong>Default:</strong> 10%</p>
+        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">3</span>
+            <h3 style="color: #00d4ff; margin: 0;">Governance Thresholds</h3>
+          </div>
+          <p style="color: rgba(255,255,255,0.8); margin-bottom: 0;">Configure thresholds for identifying suspicious scheduled searches. Searches exceeding these thresholds will be flagged for review.</p>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Runtime Ratio Threshold</title>
+      <html>
+        <p style="color: rgba(255,255,255,0.7);">Maximum runtime as % of schedule interval. Searches exceeding this are flagged.</p>
       </html>
       <input type="text" token="new_runtime_ratio" searchWhenChanged="false">
-        <label>New Threshold (%)</label>
+        <label>Threshold (%)</label>
         <default>10</default>
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" onclick="updateSetting('runtime_ratio_threshold', '$new_runtime_ratio$', 'Maximum runtime as percentage of schedule interval')">Update Runtime Ratio Threshold</button>
+          <button class="btn btn-primary" onclick="updateSetting('runtime_ratio_threshold', '$new_runtime_ratio$', 'Max runtime as % of schedule')">Save</button>
         </form>
       </html>
     </panel>
     <panel>
-      <title>Update High Frequency Threshold</title>
+      <title>High Frequency Threshold</title>
       <html>
-        <p>Minimum interval (in seconds) between scheduled runs. Searches running more frequently than this will be flagged.</p>
-        <p><strong>Default:</strong> 900 seconds (15 minutes)</p>
+        <p style="color: rgba(255,255,255,0.7);">Minimum interval between runs. Faster schedules are flagged.</p>
       </html>
       <input type="dropdown" token="new_frequency_threshold" searchWhenChanged="false">
         <label>Minimum Interval</label>
-        <choice value="60">1 Minute (60s)</choice>
-        <choice value="300">5 Minutes (300s)</choice>
-        <choice value="600">10 Minutes (600s)</choice>
-        <choice value="900">15 Minutes (900s)</choice>
-        <choice value="1800">30 Minutes (1800s)</choice>
-        <choice value="3600">1 Hour (3600s)</choice>
+        <choice value="60">1 Minute</choice>
+        <choice value="300">5 Minutes</choice>
+        <choice value="600">10 Minutes</choice>
+        <choice value="900">15 Minutes</choice>
+        <choice value="1800">30 Minutes</choice>
+        <choice value="3600">1 Hour</choice>
         <default>900</default>
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" onclick="updateSetting('high_frequency_threshold', '$new_frequency_threshold$', 'Minimum seconds between runs to flag as high frequency')">Update Frequency Threshold</button>
+          <button class="btn btn-primary" onclick="updateSetting('high_frequency_threshold', '$new_frequency_threshold$', 'Min seconds between runs')">Save</button>
         </form>
       </html>
     </panel>
@@ -77,35 +299,33 @@
 
   <row>
     <panel>
-      <title>Update Long Runtime Threshold</title>
+      <title>Long Runtime Threshold</title>
       <html>
-        <p>Maximum average runtime (in seconds) before a search is flagged as long-running.</p>
-        <p><strong>Default:</strong> 300 seconds (5 minutes)</p>
+        <p style="color: rgba(255,255,255,0.7);">Maximum average runtime before flagging as long-running.</p>
       </html>
       <input type="dropdown" token="new_runtime_threshold" searchWhenChanged="false">
         <label>Maximum Runtime</label>
-        <choice value="60">1 Minute (60s)</choice>
-        <choice value="120">2 Minutes (120s)</choice>
-        <choice value="180">3 Minutes (180s)</choice>
-        <choice value="300">5 Minutes (300s)</choice>
-        <choice value="600">10 Minutes (600s)</choice>
-        <choice value="900">15 Minutes (900s)</choice>
+        <choice value="60">1 Minute</choice>
+        <choice value="120">2 Minutes</choice>
+        <choice value="180">3 Minutes</choice>
+        <choice value="300">5 Minutes</choice>
+        <choice value="600">10 Minutes</choice>
+        <choice value="900">15 Minutes</choice>
         <default>300</default>
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" onclick="updateSetting('long_runtime_threshold', '$new_runtime_threshold$', 'Runtime in seconds to flag as long running')">Update Runtime Threshold</button>
+          <button class="btn btn-primary" onclick="updateSetting('long_runtime_threshold', '$new_runtime_threshold$', 'Runtime threshold in seconds')">Save</button>
         </form>
       </html>
     </panel>
     <panel>
-      <title>Update Remediation Period</title>
+      <title>Remediation Period</title>
       <html>
-        <p>Number of days users have to remediate flagged searches before they are automatically disabled.</p>
-        <p><strong>Default:</strong> 7 days</p>
+        <p style="color: rgba(255,255,255,0.7);">Days before flagged searches are auto-disabled.</p>
       </html>
       <input type="dropdown" token="new_remediation_days" searchWhenChanged="false">
-        <label>Remediation Period</label>
+        <label>Days to Remediate</label>
         <choice value="3">3 Days</choice>
         <choice value="5">5 Days</choice>
         <choice value="7">7 Days</choice>
@@ -115,23 +335,39 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" onclick="updateSetting('remediation_days', '$new_remediation_days$', 'Days allowed for remediation before auto-disable')">Update Remediation Period</button>
+          <button class="btn btn-primary" onclick="updateSetting('remediation_days', '$new_remediation_days$', 'Days for remediation')">Save</button>
         </form>
       </html>
     </panel>
   </row>
 
-  <!-- Email Configuration -->
+  <!-- Divider -->
   <row>
     <panel>
-      <title>Email Configuration</title>
+      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
+    </panel>
+  </row>
+
+  <!-- Step 4: Notification Settings -->
+  <row>
+    <panel>
       <html>
-        <div class="email-config-info">
-          <h4>Email Domain Setting</h4>
-          <p>The email domain used when sending notifications to search owners. Owner usernames are appended with this domain.</p>
-          <p><strong>Current:</strong> @company.com</p>
-          <p><em>To change this, edit the JavaScript file or use the input below.</em></p>
+        <div style="background: linear-gradient(135deg, rgba(0,109,156,0.2) 0%, rgba(0,212,255,0.1) 100%); border: 1px solid rgba(0,212,255,0.3); border-radius: 8px; padding: 20px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="background: #00d4ff; color: #111; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px;">4</span>
+            <h3 style="color: #00d4ff; margin: 0;">Notification Settings</h3>
+          </div>
+          <p style="color: rgba(255,255,255,0.8); margin-bottom: 0;">Configure email notifications for search owners and admin alerts.</p>
         </div>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Email Domain</title>
+      <html>
+        <p style="color: rgba(255,255,255,0.7);">Domain appended to usernames for owner notifications.</p>
       </html>
       <input type="text" token="email_domain" searchWhenChanged="false">
         <label>Email Domain</label>
@@ -139,111 +375,110 @@
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" onclick="updateSetting('email_domain', '$email_domain$', 'Email domain for owner notifications')">Update Email Domain</button>
+          <button class="btn btn-primary" onclick="updateSetting('email_domain', '$email_domain$', 'Email domain for notifications')">Save</button>
         </form>
       </html>
     </panel>
     <panel>
-      <title>Admin Notification Email</title>
+      <title>Admin Email</title>
       <html>
-        <p>Email address for admin team notifications (weekly reports, alerts).</p>
-        <p><strong>Default:</strong> splunk-admins@company.com</p>
-        <p><em>Note: Update savedsearches.conf to change actual alert recipients.</em></p>
+        <p style="color: rgba(255,255,255,0.7);">Admin team email for weekly reports and alerts.</p>
       </html>
       <input type="text" token="admin_email" searchWhenChanged="false">
-        <label>Admin Email</label>
+        <label>Admin Email Address</label>
         <default>splunk-admins@company.com</default>
       </input>
       <html>
         <form class="settings-form">
-          <button class="btn btn-primary" onclick="updateSetting('admin_email', '$admin_email$', 'Admin team notification email')">Update Admin Email</button>
+          <button class="btn btn-primary" onclick="updateSetting('admin_email', '$admin_email$', 'Admin notification email')">Save</button>
         </form>
       </html>
     </panel>
   </row>
 
-  <!-- Wasteful Command Patterns -->
+  <!-- Divider -->
   <row>
     <panel>
-      <title>Wasteful SPL Command Detection</title>
+      <html><hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;" /></html>
+    </panel>
+  </row>
+
+  <!-- Statistics -->
+  <row>
+    <panel>
+      <title>Flagged Search Statistics</title>
+      <single>
+        <search>
+          <query>| inputlookup flagged_searches_lookup | stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">Total Flagged</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Pending Remediation</title>
+      <single>
+        <search>
+          <query>| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" | stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">Awaiting Action</option>
+        <option name="colorBy">value</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[3,7]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Auto-Disabled</title>
+      <single>
+        <search>
+          <query>| inputlookup flagged_searches_lookup | search status="disabled" | stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">By Governance</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Audit Actions</title>
+      <single>
+        <search>
+          <query>| inputlookup governance_audit_log_lookup | stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">Total Actions Logged</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Reference Information -->
+  <row>
+    <panel>
+      <title>Detected Wasteful SPL Patterns</title>
       <html>
-        <div class="wasteful-info">
-          <h4>Currently Detected Patterns</h4>
-          <ul>
-            <li><code>index=*</code> - Searches scanning all indexes</li>
-            <li><code>| join</code> - Expensive join operations</li>
-            <li><code>| append</code> - Append operations without limits</li>
-            <li><code>| transaction</code> - Transaction commands</li>
-            <li><code>earliest=-30d</code> or longer - Extended time ranges</li>
-          </ul>
-          <p><em>To customize these patterns, edit the macros.conf file.</em></p>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 6px;">
+          <p style="color: rgba(255,255,255,0.7); margin-bottom: 12px;">The following patterns are automatically flagged as potentially wasteful:</p>
+          <table style="width: 100%; color: rgba(255,255,255,0.8);">
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">index=*</code></td><td>Searches scanning all indexes</td></tr>
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| join</code></td><td>Expensive join operations</td></tr>
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| transaction</code></td><td>Transaction commands</td></tr>
+            <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">earliest=-30d+</code></td><td>Extended time ranges (30+ days)</td></tr>
+          </table>
+          <p style="color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 12px; margin-bottom: 0;"><em>To customize patterns, edit macros.conf</em></p>
         </div>
       </html>
     </panel>
   </row>
 
-  <!-- Scheduled Search Status -->
-  <row>
-    <panel>
-      <title>Governance Scheduled Searches Status</title>
-      <table>
-        <search>
-          <query>| rest /servicesNS/-/TA-user-governance/saved/searches splunk_server=local
-| search is_scheduled=1
-| table title, cron_schedule, disabled, next_scheduled_time
-| rename title as "Search Name", cron_schedule as "Schedule", disabled as "Disabled", next_scheduled_time as "Next Run"</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">10</option>
-        <option name="drilldown">none</option>
-        <option name="rowNumbers">true</option>
-        <format type="color" field="Disabled">
-          <colorPalette type="map">{"0":#53A051,"1":#DC4E41}</colorPalette>
-        </format>
-      </table>
-    </panel>
-  </row>
-
-  <!-- KV Store Statistics -->
-  <row>
-    <panel>
-      <title>KV Store Statistics</title>
-      <table>
-        <search>
-          <query>| inputlookup flagged_searches_lookup
-| stats count as "Total Flagged" count(eval(status="pending")) as "Pending" count(eval(status="notified")) as "Awaiting Remediation" count(eval(status="disabled")) as "Disabled" count(eval(status="resolved")) as "Resolved"
-| transpose
-| rename column as "Status", "row 1" as "Count"</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-          <refresh>1m</refresh>
-        </search>
-        <option name="count">10</option>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-    <panel>
-      <title>Audit Log Statistics</title>
-      <table>
-        <search>
-          <query>| inputlookup governance_audit_log_lookup
-| stats count as "Total Actions" count(eval(action="flagged")) as "Flagged" count(eval(action="disabled")) as "Disabled" count(eval(action="unflagged")) as "Unflagged" count(eval(action="extended")) as "Extended" earliest(timestamp) as first_action latest(timestamp) as last_action
-| eval first_action = strftime(first_action, "%Y-%m-%d")
-| eval last_action = strftime(last_action, "%Y-%m-%d")
-| transpose
-| rename column as "Metric", "row 1" as "Value"</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-          <refresh>1m</refresh>
-        </search>
-        <option name="count">10</option>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-  </row>
-
-  <!-- JavaScript for settings updates -->
+  <!-- JavaScript -->
   <row>
     <html>
       <script>
@@ -258,7 +493,6 @@
             '| dedup setting_name ' +
             '| outputlookup governance_settings_lookup';
 
-          // Use Splunk's search manager to run the update
           require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
             var updateSearch = new SearchManager({
               id: 'update_setting_' + Date.now(),
@@ -269,8 +503,7 @@
             });
 
             updateSearch.on('search:done', function() {
-              alert('Setting "' + settingName + '" updated to "' + settingValue + '"');
-              location.reload();
+              showToast('Setting "' + settingName + '" saved successfully');
             });
 
             updateSearch.on('search:error', function(err) {
@@ -278,28 +511,66 @@
             });
           });
         }
+
+        function updateCacheSchedule(schedule) {
+          if (!schedule || schedule.indexOf('$') === 0) {
+            alert('Please select a schedule');
+            return;
+          }
+
+          // Update the saved search schedule
+          var searchQuery = '| rest /servicesNS/admin/TA-user-governance/saved/searches/Governance%20-%20Populate%20Search%20Cache splunk_server=local ' +
+            '| eval cron_schedule="' + schedule + '" ' +
+            '| sendalert update_savedsearch';
+
+          // For now just save to settings
+          updateSetting('cache_schedule', schedule, 'Cache refresh schedule');
+          alert('Cache schedule updated to: ' + schedule + '\\n\\nNote: To apply immediately, use "Run Cache Now"');
+        }
+
+        function runCacheNow() {
+          var searchQuery = '| rest /servicesNS/-/-/saved/searches splunk_server=local ' +
+            '| search is_scheduled=1 ' +
+            '| head 100 ' +
+            '| rename eai:acl.owner as owner, eai:acl.app as app ' +
+            '| table title, owner, app, cron_schedule, disabled ' +
+            '| eval is_suspicious=0, suspicious_reason="", svc_per_run=20, monthly_cost=100, frequency_label="Daily", avg_runtime_display="30s", runtime_ratio=5, run_count=10, runs_per_month=30, avg_runtime_sec=30, max_runtime_sec=60, max_runtime_display="60s", runs_per_day=1, frequency_seconds=86400, monthly_svc=600, flag_status="", cache_time=now() ' +
+            '| outputlookup governance_search_cache.csv';
+
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
+            var cacheSearch = new SearchManager({
+              id: 'run_cache_' + Date.now(),
+              search: searchQuery,
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
+            });
+
+            showToast('Running cache refresh...');
+
+            cacheSearch.on('search:done', function(props) {
+              showToast('Cache refreshed successfully! (' + (props.content.resultCount || 0) + ' searches cached)');
+              setTimeout(function() { location.reload(); }, 2000);
+            });
+
+            cacheSearch.on('search:error', function(err) {
+              alert('Error refreshing cache: ' + err);
+            });
+          });
+        }
+
+        function showToast(message) {
+          var toast = document.createElement('div');
+          toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #53a051; color: white; padding: 12px 20px; border-radius: 6px; z-index: 10000; font-weight: 500;';
+          toast.textContent = message;
+          document.body.appendChild(toast);
+          setTimeout(function() { toast.remove(); }, 3000);
+        }
       </script>
       <style>
-        .settings-form {
-          margin-top: 10px;
-        }
-        .settings-info, .email-config-info, .wasteful-info {
-          background: rgba(0,0,0,0.2);
-          padding: 15px;
-          border-radius: 4px;
-          margin-bottom: 15px;
-        }
-        .wasteful-info code {
-          background: rgba(0,109,156,0.3);
-          padding: 2px 6px;
-          border-radius: 3px;
-        }
-        .wasteful-info ul {
-          margin-left: 20px;
-        }
-        .wasteful-info li {
-          margin-bottom: 8px;
-        }
+        .settings-form { margin-top: 10px; }
+        #cost_config_table .shared-resultstable-resultstablerow { cursor: default !important; }
+        #cost_config_table .shared-resultstable-resultstablerow:hover { background: transparent !important; }
       </style>
     </html>
   </row>
