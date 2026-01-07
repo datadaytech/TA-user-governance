@@ -45,8 +45,8 @@ const test = base.extend({
 
     console.log('Navigating to governance dashboard...');
 
-    // Navigate to governance dashboard
-    await page.goto('/en-US/app/TA-user-governance/governance_dashboard', {
+    // Navigate to scheduled search governance dashboard
+    await page.goto('/en-US/app/TA-user-governance/scheduled_search_governance', {
       waitUntil: 'domcontentloaded',
       timeout: 60000
     });

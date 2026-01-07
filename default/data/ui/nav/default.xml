@@ -1,5 +1,5 @@
 <nav search_view="search" color="#00d4ff">
-  <view name="governance_dashboard" default="true" label="Scheduled Search Governance" />
+  <view name="scheduled_search_governance" default="true" label="Scheduled Search Governance" />
   <view name="dashboard_governance" label="Dashboard Governance" />
   <view name="cost_analysis" label="Cost Analysis" />
   <view name="audit_history" label="Audit History" />

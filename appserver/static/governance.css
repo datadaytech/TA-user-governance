@@ -1,8 +1,194 @@
 /*
- * Governance Dashboard Styles
- * Minimal Dark Theme Enhancements v2.0
+ * Scheduled Search Governance Dashboard Styles
+ * Premium Dark Theme v3.0
  * Works with Splunk's native theme="dark"
  */
+
+/* ================================================
+   DASHBOARD BACKGROUND & BODY STYLING
+   ================================================ */
+
+/* Premium gradient background for the entire dashboard */
+.dashboard-body,
+.dashboard-view,
+body.theme-dark .dashboard-body {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%) !important;
+    min-height: 100vh;
+}
+
+/* Add subtle animated gradient overlay */
+.dashboard-body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        radial-gradient(ellipse at 20% 20%, rgba(0, 212, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(99, 102, 241, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Dashboard content positioning */
+.dashboard-row,
+.dashboard-panel,
+.fieldset {
+    position: relative;
+    z-index: 1;
+}
+
+/* Panel container styling with glass effect */
+.dashboard-panel {
+    background: linear-gradient(145deg, rgba(30, 35, 42, 0.9) 0%, rgba(22, 27, 34, 0.95) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px !important;
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.3),
+        0 0 1px rgba(255, 255, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    margin: 8px !important;
+    overflow: hidden;
+    transition: all 0.3s ease !important;
+}
+
+.dashboard-panel:hover {
+    border-color: rgba(0, 212, 255, 0.2) !important;
+    box-shadow:
+        0 8px 30px rgba(0, 0, 0, 0.4),
+        0 0 1px rgba(0, 212, 255, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Single value metric panels - enhanced styling */
+#total_metric_panel,
+#suspicious_metric_panel,
+#flagged_metric_panel,
+#expiring_metric_panel,
+#disabled_metric_panel {
+    background: linear-gradient(145deg, rgba(30, 35, 42, 0.95) 0%, rgba(22, 27, 34, 0.98) 100%) !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    transition: all 0.3s ease !important;
+}
+
+#total_metric_panel:hover,
+#suspicious_metric_panel:hover,
+#flagged_metric_panel:hover,
+#expiring_metric_panel:hover,
+#disabled_metric_panel:hover {
+    transform: translateY(-4px) !important;
+    box-shadow:
+        0 15px 50px rgba(0, 0, 0, 0.4),
+        0 0 30px rgba(0, 212, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(0, 212, 255, 0.3) !important;
+}
+
+/* Metric panel accent colors */
+#total_metric_panel { border-top: 3px solid #006d9c !important; }
+#suspicious_metric_panel { border-top: 3px solid #f8be34 !important; }
+#flagged_metric_panel { border-top: 3px solid #dc4e41 !important; }
+#expiring_metric_panel { border-top: 3px solid #f1813f !important; }
+#disabled_metric_panel { border-top: 3px solid #708794 !important; }
+
+/* Single value text styling */
+.single-value .single-result {
+    font-size: 56px !important;
+    font-weight: 700 !important;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.3) !important;
+}
+
+/* Enhanced panel titles for single value metrics */
+.dashboard-panel .panel-head h2,
+.dashboard-panel .panel-head h3,
+.dashboard-panel .panel-title,
+.viz-single-value .single-value-header {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    padding: 12px 16px 8px 16px !important;
+    margin: 0 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Table panel titles - larger and more prominent */
+.dashboard-panel:has(.table-chrome) .panel-head h2,
+.dashboard-panel:has(.table-chrome) .panel-title {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
+    padding: 16px 20px !important;
+    background: linear-gradient(90deg, rgba(0, 212, 255, 0.08) 0%, transparent 100%) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    margin-bottom: 0 !important;
+}
+
+/* Dashboard header styling */
+.dashboard-header {
+    background: linear-gradient(90deg, rgba(0, 212, 255, 0.1) 0%, transparent 50%) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    padding: 16px 20px !important;
+    margin-bottom: 16px !important;
+}
+
+.dashboard-header h1,
+.dashboard-header .dashboard-title {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 24px !important;
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.3) !important;
+}
+
+.dashboard-header .description {
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-size: 14px !important;
+}
+
+/* Table styling enhancements */
+.table-chrome {
+    background: transparent !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+}
+
+.table-chrome thead th {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.3) 100%) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    padding: 14px 12px !important;
+    border-bottom: 2px solid rgba(0, 212, 255, 0.3) !important;
+}
+
+.table-chrome tbody tr {
+    background: rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.2s ease !important;
+}
+
+.table-chrome tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+
+.table-chrome tbody tr:hover {
+    background: rgba(0, 109, 156, 0.25) !important;
+}
+
+.table-chrome tbody td {
+    padding: 12px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
 
 /* ================================================
    CUSTOM SCROLLBAR (subtle enhancement)
