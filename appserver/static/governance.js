@@ -180,15 +180,7 @@ require([
         }, 1000); // Update every second
     }
 
-    // Stop countdown timer when popup closes
-    $(document).on('click', '#metricPopupClose, #metricPopupOverlay', function(e) {
-        if (e.target === this || e.target.id === 'metricPopupClose') {
-            if (window.countdownTimerInterval) {
-                clearInterval(window.countdownTimerInterval);
-                window.countdownTimerInterval = null;
-            }
-        }
-    });
+    // Note: Countdown timer cleanup is now handled by closeMetricPopup() function
 
     // Check for overdue searches and prompt for auto-disable
     function checkAndPromptOverdueSearches() {
@@ -1436,16 +1428,34 @@ require([
             performExtendDeadline();
         });
 
-        // Metric popup events
-        $(document).on('click', '#metricPopupClose', function() {
-            $('#metricPopupOverlay').removeClass('active');
+        // Metric popup events - consolidated close handler
+        $(document).on('click', '#metricPopupClose', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeMetricPopup();
         });
 
         $(document).on('click', '#metricPopupOverlay', function(e) {
             if (e.target === this) {
-                $('#metricPopupOverlay').removeClass('active');
+                closeMetricPopup();
             }
         });
+
+        // Centralized close function
+        function closeMetricPopup() {
+            $('#metricPopupOverlay').removeClass('active');
+            window.currentMetricType = null;
+
+            // Clear countdown timer
+            if (window.countdownTimerInterval) {
+                clearInterval(window.countdownTimerInterval);
+                window.countdownTimerInterval = null;
+            }
+
+            // Remove any overdue banner
+            $('#overdueBanner').remove();
+        }
+        window.closeMetricPopup = closeMetricPopup;
 
         // Metric popup select all checkbox
         $(document).on('change', '#metricSelectAll', function() {
@@ -2101,11 +2111,9 @@ require([
 
                     console.log("Token triggered metric popup:", value, metricValue, title);
 
-                    if (value === 'flagged') {
-                        openFlaggedModal();
-                    } else {
-                        openMetricPopup(value, metricValue, title);
-                    }
+                    // Always use openMetricPopup - it has the unified UI for all metric types
+                    // The old openFlaggedModal was a separate modal but we now use the unified popup
+                    openMetricPopup(value, metricValue, title);
 
                     // Clear the token so it can be triggered again
                     setTimeout(function() {
@@ -2130,6 +2138,25 @@ require([
                         defaultTokens.unset('metric_popup_type');
                         defaultTokens.unset('metric_popup_value');
                         defaultTokens.unset('metric_popup_title');
+                    }, 100);
+                }
+            });
+
+            // Watch for dashboard popup token (from Dashboard Governance page)
+            defaultTokens.on('change:dashboard_popup_type', function(model, value) {
+                if (value) {
+                    var dashboardValue = defaultTokens.get('dashboard_popup_value') || '0';
+                    var dashboardTitle = defaultTokens.get('dashboard_popup_title') || value;
+
+                    console.log("Drilldown triggered dashboard popup:", value, dashboardValue, dashboardTitle);
+
+                    openDashboardPopup(value, dashboardValue, dashboardTitle);
+
+                    // Clear the tokens so drilldown can be triggered again
+                    setTimeout(function() {
+                        defaultTokens.unset('dashboard_popup_type');
+                        defaultTokens.unset('dashboard_popup_value');
+                        defaultTokens.unset('dashboard_popup_title');
                     }, 100);
                 }
             });
@@ -2595,12 +2622,159 @@ require([
     };
 
     // ============================================
+    // DASHBOARD POPUP FUNCTIONS
+    // ============================================
+
+    var currentDashboardSearches = [];
+    var lastDashboardPopupOpenTime = 0;
+
+    function openDashboardPopup(dashboardType, value, title) {
+        // Debounce: prevent double-opens within 500ms
+        var now = Date.now();
+        if (now - lastDashboardPopupOpenTime < 500) {
+            console.log("Debounced dashboard popup open - too soon after last open");
+            return;
+        }
+        lastDashboardPopupOpenTime = now;
+
+        // If popup is already open with same type, ignore
+        if ($('#metricPopupOverlay').hasClass('active') && window.currentDashboardType === dashboardType) {
+            console.log("Dashboard popup already open for this type");
+            return;
+        }
+
+        console.log("Opening dashboard popup:", dashboardType, value, title);
+        currentDashboardSearches = [];
+
+        $('#metricPopupValue').text(value);
+        $('#metricPopupTitle').text(title);
+        $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Dashboard</th><th>Owner</th><th>App</th><th>Sharing</th><th>Size (KB)</th></tr>');
+        $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        $('#metricPopupOverlay').addClass('active');
+
+        // Store current dashboard type
+        window.currentDashboardType = dashboardType;
+
+        // Build search query based on dashboard type
+        var searchQuery = '';
+        switch (dashboardType) {
+            case 'total':
+                searchQuery = '| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing | eval data_size_kb = round(len(\'eai:data\') / 1024, 1) | table label, owner, app, sharing, data_size_kb | sort - data_size_kb | head 50';
+                break;
+            case 'complex':
+                searchQuery = '| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | eval data_len = len(\'eai:data\') | where data_len > 10000 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing | eval data_size_kb = round(data_len / 1024, 1) | table label, owner, app, sharing, data_size_kb | sort - data_size_kb | head 50';
+                break;
+            case 'private':
+                searchQuery = '| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing | where sharing="user" | eval data_size_kb = round(len(\'eai:data\') / 1024, 1) | table label, owner, app, sharing, data_size_kb | sort - data_size_kb | head 50';
+                break;
+            case 'app':
+                searchQuery = '| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing | where sharing="app" | eval data_size_kb = round(len(\'eai:data\') / 1024, 1) | table label, owner, app, sharing, data_size_kb | sort - data_size_kb | head 50';
+                break;
+            case 'global':
+                searchQuery = '| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing | where sharing="global" | eval data_size_kb = round(len(\'eai:data\') / 1024, 1) | table label, owner, app, sharing, data_size_kb | sort - data_size_kb | head 50';
+                break;
+            default:
+                searchQuery = '| rest /servicesNS/-/-/data/ui/views splunk_server=local | search isDashboard=1 isVisible=1 | rename eai:acl.app as app, eai:acl.owner as owner, eai:acl.sharing as sharing | eval data_size_kb = round(len(\'eai:data\') / 1024, 1) | table label, owner, app, sharing, data_size_kb | sort - data_size_kb | head 50';
+        }
+
+        // Run search using SearchManager
+        var dashboardSearch = new SearchManager({
+            id: 'dashboard_popup_search_' + Date.now(),
+            search: searchQuery,
+            earliest_time: '-24h',
+            latest_time: 'now',
+            autostart: true
+        });
+
+        dashboardSearch.on('search:done', function() {
+            var results = dashboardSearch.data('results');
+            if (results) {
+                results.on('data', function() {
+                    var rows = results.data().rows;
+                    var fields = results.data().fields;
+
+                    if (!rows || rows.length === 0) {
+                        $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No dashboards found</td></tr>');
+                        return;
+                    }
+
+                    currentDashboardSearches = [];
+                    var html = '';
+
+                    for (var i = 0; i < rows.length; i++) {
+                        var row = rows[i];
+                        var name = row[0] || '';
+                        var owner = row[1] || '';
+                        var app = row[2] || '';
+                        var sharing = row[3] || '';
+                        var sizeKb = row[4] || '0';
+
+                        currentDashboardSearches.push({
+                            name: name,
+                            owner: owner,
+                            app: app,
+                            sharing: sharing,
+                            sizeKb: sizeKb
+                        });
+
+                        // Color code sharing type
+                        var sharingBadge = '';
+                        if (sharing === 'global') {
+                            sharingBadge = '<span style="background: #006d9c; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">Global</span>';
+                        } else if (sharing === 'app') {
+                            sharingBadge = '<span style="background: #53a051; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px;">App</span>';
+                        } else {
+                            sharingBadge = '<span style="background: #f8be34; color: black; padding: 2px 8px; border-radius: 3px; font-size: 11px;">Private</span>';
+                        }
+
+                        // Color code size
+                        var sizeColor = parseFloat(sizeKb) > 25 ? '#dc4e41' : (parseFloat(sizeKb) > 10 ? '#f8be34' : '#53a051');
+
+                        html += '<tr class="metric-popup-row" data-index="' + i + '" data-dashboard-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
+                            '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
+                            '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
+                            '<td style="padding: 8px;">' + escapeHtml(owner) + '</td>' +
+                            '<td style="padding: 8px;">' + escapeHtml(app) + '</td>' +
+                            '<td style="padding: 8px;">' + sharingBadge + '</td>' +
+                            '<td style="padding: 8px; color: ' + sizeColor + '; font-weight: 600;">' + sizeKb + '</td>' +
+                            '</tr>';
+                    }
+
+                    $('#metricPopupTableBody').html(html);
+                });
+            }
+        });
+
+        dashboardSearch.on('search:error', function(err) {
+            console.error("Dashboard search error:", err);
+            $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: #dc4e41; padding: 20px;">Error loading dashboards</td></tr>');
+        });
+    }
+
+    window.openDashboardPopup = openDashboardPopup;
+
+    // ============================================
     // METRIC POPUP FUNCTIONS
     // ============================================
 
     var currentMetricSearches = [];
+    var lastPopupOpenTime = 0;
 
     function openMetricPopup(metricType, value, title) {
+        // Debounce: prevent double-opens within 500ms (from both drilldown and click handlers)
+        var now = Date.now();
+        if (now - lastPopupOpenTime < 500) {
+            console.log("Debounced metric popup open - too soon after last open");
+            return;
+        }
+        lastPopupOpenTime = now;
+
+        // If popup is already open with same type, ignore
+        if ($('#metricPopupOverlay').hasClass('active') && window.currentMetricType === metricType) {
+            console.log("Popup already open for this metric type");
+            return;
+        }
+
         console.log("Opening metric popup:", metricType, value, title);
         currentMetricSearches = [];
 
@@ -2814,9 +2988,10 @@ require([
             var isFlaggedPanel = panelTitle.indexOf('Flagged') > -1 && panelTitle.indexOf('Pending') > -1;
             var isSuspiciousPanel = panelTitle.indexOf('Suspicious') > -1;
             var isCostPanel = panelTitle.indexOf('Highest Cost') > -1 || panelTitle.indexOf('Cost Impact') > -1;
+            var isActivityPanel = panelTitle.indexOf('Activity') > -1 || panelTitle.indexOf('Audit') > -1 || panelTitle.indexOf('History') > -1;
 
-            // Skip checkbox enhancement for cost-only panels
-            var skipCheckboxes = isCostPanel;
+            // Skip checkbox enhancement for cost-only panels and activity/audit log panels
+            var skipCheckboxes = isCostPanel || isActivityPanel;
 
             var scheduleColIndex = -1;
             var searchNameColIndex = -1;
@@ -3452,12 +3627,8 @@ require([
 
                     console.log("Metric panel clicked:", type, value, title);
 
-                    // For flagged or expiring, open the flagged modal
-                    if (type === 'flagged' || type === 'expiring') {
-                        openFlaggedModal();
-                    } else {
-                        openMetricPopup(type, value, title);
-                    }
+                    // Always use openMetricPopup for consistent unified UI
+                    openMetricPopup(type, value, title);
                 });
             });
         }

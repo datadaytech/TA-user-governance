@@ -96,11 +96,65 @@ body.theme-dark .dashboard-body {
 #expiring_metric_panel { border-top: 3px solid #f1813f !important; }
 #disabled_metric_panel { border-top: 3px solid #708794 !important; }
 
-/* Single value text styling */
-.single-value .single-result {
-    font-size: 56px !important;
-    font-weight: 700 !important;
-    text-shadow: 0 0 30px rgba(0, 212, 255, 0.3) !important;
+/* Single value text styling - enhanced metrics */
+.single-value .single-result,
+.viz-single-value .single-result,
+.single-value-viz .single-result {
+    font-size: 64px !important;
+    font-weight: 800 !important;
+    line-height: 1.1 !important;
+    letter-spacing: -2px !important;
+    text-shadow:
+        0 0 40px rgba(0, 212, 255, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    padding: 20px 0 !important;
+}
+
+/* Metric-specific color enhancements */
+#total_metric_panel .single-result {
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+#suspicious_metric_panel .single-result {
+    background: linear-gradient(135deg, #f8be34 0%, #e6a61a 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+#flagged_metric_panel .single-result {
+    background: linear-gradient(135deg, #dc4e41 0%, #c43832 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+#expiring_metric_panel .single-result {
+    background: linear-gradient(135deg, #f1813f 0%, #e06820 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+#disabled_metric_panel .single-result {
+    background: linear-gradient(135deg, #708794 0%, #5a6f7a 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+/* Single value viz container */
+.single-value-viz,
+.viz-single-value {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px !important;
+    min-height: 120px !important;
 }
 
 /* Enhanced panel titles for single value metrics */
@@ -153,41 +207,95 @@ body.theme-dark .dashboard-body {
     font-size: 14px !important;
 }
 
-/* Table styling enhancements */
-.table-chrome {
-    background: transparent !important;
+/* Table styling enhancements - force dark backgrounds */
+.table-chrome,
+.shared-resultstable,
+.splunk-table,
+table.table-chrome,
+.dashboard-panel table {
+    background: #171b21 !important;
+    background-color: #171b21 !important;
     border-radius: 8px !important;
     overflow: hidden !important;
 }
 
-.table-chrome thead th {
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.3) 100%) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
+/* Force table wrapper/container backgrounds */
+.panel-body,
+.dashboard-panel .panel-body,
+.table-wrapper,
+.viz-table-wrapper,
+.shared-resultstable-resultstablecontainer,
+.table-container,
+.dashboard-element .panel-body {
+    background: #171b21 !important;
+    background-color: #171b21 !important;
+}
+
+.table-chrome thead th,
+.shared-resultstable th,
+table th {
+    background: linear-gradient(180deg, #1a1f27 0%, #151920 100%) !important;
+    background-color: #1a1f27 !important;
+    color: rgba(255, 255, 255, 0.95) !important;
     font-weight: 600 !important;
     text-transform: uppercase !important;
     font-size: 11px !important;
     letter-spacing: 0.5px !important;
     padding: 14px 12px !important;
     border-bottom: 2px solid rgba(0, 212, 255, 0.3) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
-.table-chrome tbody tr {
-    background: rgba(0, 0, 0, 0.2) !important;
+.table-chrome tbody,
+.shared-resultstable tbody,
+table tbody {
+    background: #171b21 !important;
+    background-color: #171b21 !important;
+}
+
+.table-chrome tbody tr,
+.shared-resultstable tbody tr,
+table tbody tr {
+    background: #1a1f27 !important;
+    background-color: #1a1f27 !important;
     transition: all 0.2s ease !important;
 }
 
-.table-chrome tbody tr:nth-child(even) {
-    background: rgba(0, 0, 0, 0.3) !important;
+.table-chrome tbody tr:nth-child(even),
+.shared-resultstable tbody tr:nth-child(even),
+table tbody tr:nth-child(even) {
+    background: #151920 !important;
+    background-color: #151920 !important;
 }
 
-.table-chrome tbody tr:hover {
-    background: rgba(0, 109, 156, 0.25) !important;
+.table-chrome tbody tr:hover,
+.shared-resultstable tbody tr:hover,
+table tbody tr:hover {
+    background: rgba(0, 109, 156, 0.35) !important;
+    background-color: rgba(0, 109, 156, 0.35) !important;
 }
 
-.table-chrome tbody td {
+.table-chrome tbody td,
+.shared-resultstable tbody td,
+table tbody td {
     padding: 12px !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.03) !important;
     color: rgba(255, 255, 255, 0.9) !important;
+    background: transparent !important;
+}
+
+/* Ensure no white backgrounds leak through */
+.table-chrome *,
+.shared-resultstable *,
+.panel-body * {
+    background-color: transparent;
+}
+
+/* Table scroll wrapper */
+.shared-resultstable-resultstablecontainer,
+.results-table {
+    background: #171b21 !important;
 }
 
 /* ================================================
