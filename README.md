@@ -182,6 +182,20 @@ Stores configurable thresholds and settings.
 ### governance_audit_log
 Audit trail of all governance actions.
 
+## Known Issues
+
+### KV Store Error on Apple Silicon (M1/M2/M3 Macs)
+
+When running Splunk in Docker on Apple Silicon Macs, you may see this error:
+
+```
+KV Store process terminated abnormally (exit code 4, status PID killed by signal 4: Illegal instruction)
+```
+
+**This does NOT affect this app.** The TA-user-governance app uses **CSV-based lookups**, not KV Store. All functionality (flagging, unflagging, audit logs, settings) works correctly despite this error.
+
+The error occurs because Splunk's embedded MongoDB binary doesn't support ARM architecture under x86 emulation.
+
 ## Troubleshooting
 
 ### Dashboard shows no data
@@ -194,9 +208,11 @@ Audit trail of all governance actions.
 - Check the email domain setting matches your organization
 - Review `_internal` index for email errors
 
-### KV Store errors
-- Run: `| inputlookup governance_settings_lookup` to verify access
-- Ensure collections are created (restart Splunk after install)
+### Flagging not persisting
+- This app uses CSV lookups, not KV Store
+- Verify lookup permissions: `ls -la $SPLUNK_HOME/etc/apps/TA-user-governance/lookups/`
+- Test lookup access: `| inputlookup flagged_searches_lookup`
+- KV Store errors do NOT affect this app (see Known Issues above)
 
 ## Support
 
