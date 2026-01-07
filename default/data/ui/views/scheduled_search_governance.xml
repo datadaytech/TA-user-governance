@@ -37,7 +37,7 @@
         <title>Total Scheduled Searches</title>
         <search>
           <query>| inputlookup governance_search_cache.csv
-| search disabled=0
+| where disabled="0" OR disabled=0
 | stats count</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -46,9 +46,10 @@
         <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <option name="underLabel">enabled searches</option>
         <drilldown>
           <set token="metric_popup_type">total</set>
-          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_value">$result.count$</set>
           <set token="metric_popup_title">Total Scheduled Searches</set>
         </drilldown>
       </single>
@@ -58,7 +59,7 @@
         <title>Suspicious (Unflagged)</title>
         <search>
           <query>| inputlookup governance_search_cache.csv
-| search is_suspicious=1 disabled=0
+| where (disabled="0" OR disabled=0) AND is_suspicious=1
 | where isnull(flag_status) OR (flag_status!="pending" AND flag_status!="notified" AND flag_status!="disabled")
 | stats count</query>
           <earliest>-24h@h</earliest>
@@ -69,9 +70,10 @@
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[5,10]</option>
         <option name="useColors">1</option>
+        <option name="underLabel">unflagged</option>
         <drilldown>
           <set token="metric_popup_type">suspicious</set>
-          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_value">$result.count$</set>
           <set token="metric_popup_title">Suspicious Searches</set>
         </drilldown>
       </single>
@@ -80,7 +82,7 @@
       <single id="flagged_metric">
         <title>Currently Flagged</title>
         <search>
-          <query>| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" OR status="disabled" | stats dc(search_name) as count</query>
+          <query>| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" OR status="disabled" OR status="review" | stats dc(search_name) as count</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
@@ -89,9 +91,10 @@
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[3,7]</option>
         <option name="useColors">1</option>
+        <option name="underLabel">searches</option>
         <drilldown>
           <set token="metric_popup_type">flagged</set>
-          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_value">$result.count$</set>
           <set token="metric_popup_title">Flagged Searches</set>
         </drilldown>
       </single>
@@ -114,9 +117,10 @@
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[1,3]</option>
         <option name="useColors">1</option>
+        <option name="underLabel">need action</option>
         <drilldown>
           <set token="metric_popup_type">expiring</set>
-          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_value">$result.count$</set>
           <set token="metric_popup_title">Expiring Soon</set>
         </drilldown>
       </single>
@@ -140,9 +144,10 @@
         <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <option name="underLabel">this week</option>
         <drilldown>
           <set token="metric_popup_type">disabled</set>
-          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_value">$result.disabled_count$</set>
           <set token="metric_popup_title">Auto-Disabled Searches</set>
         </drilldown>
       </single>
@@ -156,12 +161,22 @@
       <table id="suspicious_searches_table">
         <search>
           <query>| inputlookup governance_search_cache.csv
-| search is_suspicious=1 disabled=0
+| where (disabled="0" OR disabled=0) AND is_suspicious=1
 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status, remediation_deadline
 | eval is_flagged = if(isnotnull(flag_status) AND (flag_status="pending" OR flag_status="notified"), "Yes", "No")
-| eval days_remaining = if(isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), "N/A")
-| table title, owner, app, cron_schedule, frequency_label, avg_runtime_display, runtime_ratio, svc_per_run, monthly_cost, suspicious_reason, is_flagged, days_remaining
-| rename title as "Search Name", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", runtime_ratio as "Runtime Ratio %", svc_per_run as "SVC/Run", monthly_cost as "Monthly Cost", suspicious_reason as "Reason", is_flagged as "Flagged", days_remaining as "Days Left"
+| eval governance_status = case(
+    flag_status="disabled", "Disabled by Governance",
+    flag_status="review", "Under Review",
+    flag_status="notified", "Pending Remediation",
+    flag_status="pending", "Flagged",
+    is_suspicious=1, "Suspicious",
+    1=1, "OK")
+| eval days_remaining = case(
+    isnull(remediation_deadline), "N/A",
+    remediation_deadline &lt; now(), 0,
+    1=1, round((remediation_deadline - now()) / 86400, 1))
+| table title, governance_status, owner, app, cron_schedule, frequency_label, avg_runtime_display, runtime_ratio, svc_per_run, monthly_cost, suspicious_reason, is_flagged, days_remaining
+| rename title as "Search Name", governance_status as "Status", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", runtime_ratio as "Runtime Ratio %", svc_per_run as "SVC/Run", monthly_cost as "Monthly Cost", suspicious_reason as "Reason", is_flagged as "Flagged", days_remaining as "Days Left"
 | sort - "Runtime Ratio %"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -171,6 +186,9 @@
         <option name="drilldown">none</option>
         <option name="rowNumbers">true</option>
         <option name="wrap">true</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"OK":#53A051,"Suspicious":#F8BE34,"Flagged":#F1813F,"Pending Remediation":#DC4E41,"Disabled by Governance":#708794,"Under Review":#6F42C1}</colorPalette>
+        </format>
         <format type="color" field="Runtime Ratio %">
           <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
           <scale type="minMidMax" midValue="10"></scale>
@@ -243,7 +261,12 @@
     flag_status="pending", "Flagged",
     is_suspicious=1, "Suspicious",
     1=1, "OK")
-| eval days_remaining = if(isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), null())
+| eval days_remaining = case(
+    flag_status="disabled", "N/A",
+    flag_status="resolved", "N/A",
+    isnull(remediation_deadline), null(),
+    remediation_deadline &lt; now(), 0,
+    1=1, round((remediation_deadline - now()) / 86400, 1))
 | eval is_flagged_search = if(flag_status="pending" OR flag_status="notified" OR flag_status="disabled", 1, 0)
 | eval is_expiring_soon = if(isnotnull(days_remaining) AND days_remaining >= 0 AND days_remaining &lt;= 3, 1, 0)
 | eval view_match = case(
@@ -272,10 +295,16 @@
     governance_status="Pending Remediation", "⚠️ ",
     governance_status="Flagged", "🚩 ",
     governance_status="Suspicious", "⚡ ",
-    1=1, "")
+    1=1, "✓ ")
+| eval icon_description = case(
+    governance_status="Disabled by Governance", "Auto-disabled by governance policy",
+    governance_status="Pending Remediation", "Flagged - awaiting owner remediation",
+    governance_status="Flagged", "Newly flagged for review",
+    governance_status="Suspicious", "Potentially problematic search",
+    1=1, "No issues detected")
 | eval display_name = status_icon . title
-| table display_name, governance_status, owner, app, cron_schedule, frequency_label, avg_runtime_display, run_count, runtime_ratio, svc_per_run, monthly_cost, days_remaining, flagged_by, flag_reason
-| rename display_name as "Search Name", governance_status as "Status", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", run_count as "Runs", runtime_ratio as "Runtime %", svc_per_run as "SVC/Run", monthly_cost as "Cost/Mo", days_remaining as "Days Left", flagged_by as "Flagged By", flag_reason as "Flag Reason"</query>
+| table display_name, icon_description, governance_status, owner, app, cron_schedule, frequency_label, avg_runtime_display, run_count, runtime_ratio, svc_per_run, monthly_cost, days_remaining, flagged_by, flag_reason
+| rename display_name as "Search Name", icon_description as "Icon Meaning", governance_status as "Status", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", run_count as "Runs", runtime_ratio as "Runtime %", svc_per_run as "SVC/Run", monthly_cost as "Cost/Mo", days_remaining as "Days Left", flagged_by as "Flagged By", flag_reason as "Flag Reason"</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
           <refresh>1m</refresh>

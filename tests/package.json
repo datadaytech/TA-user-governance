@@ -1,30 +1,69 @@
 {
   "name": "ta-user-governance-tests",
   "version": "1.0.0",
-  "description": "Playwright functional tests for TA-user-governance Splunk app",
+  "description": "Comprehensive test suite for TA-user-governance Splunk app",
   "scripts": {
     "test": "npx playwright test",
     "test:headed": "npx playwright test --headed",
     "test:debug": "npx playwright test --debug",
     "test:ui": "npx playwright test --ui",
-    "test:unit": "npx jest unit/",
+
+    "test:unit": "npx jest unit/ --config jest.config.js",
+    "test:unit:coverage": "npx jest unit/ --config jest.config.js --coverage",
+    "test:unit:watch": "npx jest unit/ --config jest.config.js --watch",
+
+    "test:api": "npx jest api/ --config jest.config.js --testTimeout=60000",
+    "test:integration": "SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test integration/ --reporter=list",
+
+    "test:smoke": "SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test smoke/ --reporter=list",
+    "test:visual": "SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test visual/ --reporter=list",
+    "test:e2e": "SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test e2e/ --reporter=list",
+
     "test:checkbox": "npx playwright test checkbox.spec.js",
     "test:all": "npm run test:unit && npm run test",
+
+    "validate": "npm run test:unit && echo '✅ Unit tests passed'",
+    "validate:quick": "npm run test:unit && npm run test:smoke",
+    "validate:full": "npm run test:unit && npm run test:api && npm run test:smoke && npm run test:e2e && echo '✅ Full validation passed'",
+
+    "pre-pr": "echo '\\n========================================' && echo '  PRE-PR COMPREHENSIVE TEST SUITE' && echo '========================================\\n' && npm run test:unit && echo '\\n✅ Unit tests passed\\n' && npm run test:api && echo '\\n✅ API tests passed\\n' && npm run test:smoke && echo '\\n✅ Smoke tests passed\\n' && npm run test:visual && echo '\\n✅ Visual tests passed\\n' && npm run test:e2e && echo '\\n✅ E2E tests passed\\n' && echo '\\n========================================' && echo '  ✅ ALL PRE-PR TESTS PASSED' && echo '  READY FOR PULL REQUEST' && echo '========================================\\n'",
+
+    "full-test": "echo '=== FULL PRE-PR TEST SUITE ===' && npm run test:unit && echo '' && echo '=== CORE FUNCTIONALITY TESTS ===' && SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test extend-trace.spec.js visual-indicator-persistence.spec.js negative-extension.spec.js flag-persistence-regression.spec.js --reporter=list && echo '' && echo '=== VISUAL REGRESSION SCREENSHOTS ===' && SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test pre-pr-validation.spec.js --reporter=list && echo '' && echo '✅ ALL PRE-PR TESTS PASSED - READY FOR PULL REQUEST'",
+
+    "screenshots": "SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test pre-pr-validation.spec.js --reporter=list",
+    "screenshots:all": "SPLUNK_URL=http://localhost:8000 SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 npx playwright test visual/ e2e/ --reporter=list",
+
     "report": "npx playwright show-report",
+    "report:coverage": "open coverage/lcov-report/index.html",
+    "report:unit": "open test-reports/unit-test-report.html",
+
+    "clean": "rm -rf test-results screenshots/pre-pr-* screenshots/e2e-workflow visual/current visual/diff coverage test-reports",
+    "clean:baseline": "rm -rf visual/baseline",
+
     "start-splunk": "docker start splunk-dev && echo 'Waiting for Splunk...' && sleep 30",
-    "stop-splunk": "docker stop splunk-dev"
+    "stop-splunk": "docker stop splunk-dev",
+    "restart-splunk": "npm run stop-splunk && npm run start-splunk"
   },
   "keywords": [
     "splunk",
     "testing",
     "playwright",
-    "governance"
+    "governance",
+    "jest",
+    "e2e",
+    "visual-regression"
   ],
   "author": "DataDay Technology Solutions",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "jest": "^29.7.0"
+    "@types/jest": "^30.0.0",
+    "axios": "^1.13.2",
+    "jest": "^29.7.0",
+    "jest-html-reporter": "^4.3.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "supertest": "^7.2.2"
   }
 }

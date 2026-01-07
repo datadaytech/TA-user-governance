@@ -88,9 +88,19 @@ require([
             return '<span class="countdown-disabled" style="color: rgba(255,255,255,0.4);">N/A</span>';
         }
 
+        // If resolved (unflagged), show N/A - no deadline applies to resolved searches
+        if (status === 'resolved') {
+            return '<span class="countdown-resolved" style="color: rgba(255,255,255,0.4);">N/A</span>';
+        }
+
         // If under review, show paused timer
         if (status === 'review') {
             return '<span class="countdown-review" style="color: #6f42c1; font-weight: 600;">⏸️ Under Review</span>';
+        }
+
+        // If status is not a flagged status (pending, notified), show N/A
+        if (status && status !== 'pending' && status !== 'notified' && status !== 'flagged' && status !== 'expiring') {
+            return '<span class="countdown-inactive" style="color: rgba(255,255,255,0.4);">N/A</span>';
         }
 
         if (!deadlineEpoch) {
@@ -322,30 +332,36 @@ require([
         var badges = [];
         var statusLower = (status || '').toLowerCase();
 
-        // Badge styles
+        // Badge styles - color coded by urgency/status
+        // Yellow (#f8be34): awaiting action (notified), suspicious
+        // Orange (#f1813f): newly flagged (flagged, pending)
+        // Red (#dc4e41): expiring soon, critical
+        // Gray (#708794): disabled
+        // Green (#53a051): active, enabled
+        // Purple (#6f42c1): under review
         var badgeStyles = {
-            flagged: 'background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
-            pending: 'background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
-            notified: 'background: #5cc05c; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
-            enabled: 'background: #2ea043; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
-            disabled: 'background: #dc4e41; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            flagged: 'background: #f1813f; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            pending: 'background: #f1813f; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            notified: 'background: #f8be34; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            enabled: 'background: #53a051; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            disabled: 'background: #708794; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
             expiring: 'background: #dc4e41; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
-            suspicious: 'background: #f8991d; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
-            active: 'background: #5cc05c; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            suspicious: 'background: #f8be34; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
+            active: 'background: #53a051; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;',
             review: 'background: #6f42c1; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-right: 4px;'
         };
 
         // Badge labels
         var badgeLabels = {
             flagged: 'FLAGGED',
-            pending: 'FLAGGED',
+            pending: 'PENDING',
             notified: 'NOTIFIED',
             enabled: 'ENABLED',
             disabled: 'DISABLED',
             expiring: 'EXPIRING',
             suspicious: 'SUSPICIOUS',
             active: 'ACTIVE',
-            review: 'PENDING REVIEW'
+            review: 'UNDER REVIEW'
         };
 
         // Determine which badges to show
@@ -498,8 +514,32 @@ require([
                     }
                 }
             }
+
+            // Re-enhance tables after Splunk re-renders them
+            // Multiple calls at staggered intervals to catch async rendering
+            setTimeout(enhanceScheduleColumns, 1000);
+            setTimeout(enhanceScheduleColumns, 2000);
+            setTimeout(enhanceScheduleColumns, 3000);
+            setTimeout(enhanceScheduleColumns, 5000);
+
+            // Re-setup metric panel click handlers after refresh
+            // Panels may have been recreated with fresh DOM elements
+            setTimeout(function() {
+                // Clear existing setup markers so handlers are re-attached
+                $('.dashboard-element.single, .dashboard-row .dashboard-cell, .dashboard-panel').removeAttr('data-metric-setup');
+                setupMetricPanelClickHandlers();
+            }, 1500);
+            setTimeout(function() {
+                setupMetricPanelClickHandlers();
+            }, 3000);
+            setTimeout(function() {
+                setupMetricPanelClickHandlers();
+            }, 5000);
         }, 500);
     }
+
+    // Expose refreshDashboard globally for external access (e.g., tests, integrations)
+    window.refreshDashboard = refreshDashboard;
 
     // Show toast notification
     function showToast(message) {
@@ -693,11 +733,25 @@ require([
                     // Update checkbox data
                     $row.find('.gov-checkbox').attr('data-flagged', 'true');
 
-                    // Add flag indicator if not present
-                    var $searchCell = $row.find('td').filter(function() {
-                        return $(this).text().indexOf(s.searchName) > -1;
-                    }).first();
-                    if ($searchCell.length && !$searchCell.find('.flag-indicator').length) {
+                    // Add flag indicator to the Search Name column (first non-checkbox, non-row-number cell)
+                    // Skip checkbox cell and row number cell, then get the first content cell
+                    var $cells = $row.find('td');
+                    var $searchCell = null;
+                    $cells.each(function(idx) {
+                        var $cell = $(this);
+                        // Skip checkbox cell
+                        if ($cell.hasClass('gov-checkbox-cell')) return true;
+                        // Skip row number cell (just a number)
+                        if ($cell.text().trim().match(/^\d+$/)) return true;
+                        // This should be the search name column - verify it contains the search name
+                        var cellText = $cell.text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓]+/, '').trim();
+                        if (cellText === s.searchName || cellText.indexOf(s.searchName) > -1) {
+                            $searchCell = $cell;
+                            return false; // break
+                        }
+                    });
+
+                    if ($searchCell && $searchCell.length && !$searchCell.find('.flag-indicator').length) {
                         $searchCell.prepend('<span class="flag-indicator" style="color: #dc4e41; margin-right: 6px; font-size: 12px;" title="Flagged for review">🚩</span>');
                     }
 
@@ -837,10 +891,11 @@ require([
 
         $('#extendSearchList').html(listHtml);
 
-        // Reset button states
+        // Reset button states and set default value
+        currentExtendDays = 7;
         $('.extend-days-btn').removeClass('active');
         $('.extend-days-btn[data-days="7"]').addClass('active');
-        $('#extendCustomDays').val('');
+        $('#extendCustomDays').val('7');
 
         updateExtendPreview();
         $('#extendModalOverlay').addClass('active');
@@ -859,40 +914,176 @@ require([
     }
 
     function performExtendDeadline() {
-        var extensionDays = currentExtendDays;
+        console.log("performExtendDeadline called");
+
+        // Read from input - allow negative values for reducing time
+        var inputVal = parseInt($('#extendCustomDays').val());
+        var extensionDays = !isNaN(inputVal) ? inputVal : currentExtendDays;
         var searches = currentExtendSearches;
 
-        if (extensionDays <= 0 || !searches.length) {
-            alert("Please select a valid extension period.");
+        console.log("performExtendDeadline: inputVal=" + inputVal + ", extensionDays=" + extensionDays + ", searches.length=" + (searches ? searches.length : 0));
+
+        if (extensionDays === 0 || !searches || !searches.length) {
+            console.log("performExtendDeadline: FAILED validation - extensionDays=" + extensionDays + ", searches=" + JSON.stringify(searches));
+            alert("Please enter a non-zero extension value.");
             return;
         }
 
         var extensionSeconds = extensionDays * 24 * 60 * 60;
+        var isReducing = extensionDays < 0;
+
+        // If reducing time, check if any search would have deadline in the past
+        if (isReducing) {
+            var now = Math.floor(Date.now() / 1000);
+            var searchesWithExpiredDeadline = searches.filter(function(s) {
+                // If we have deadline info, check if reduction would expire it
+                if (s.deadlineEpoch) {
+                    return (s.deadlineEpoch + extensionSeconds) <= now;
+                }
+                // If no deadline info, we'll check after the query
+                return false;
+            });
+
+            if (searchesWithExpiredDeadline.length > 0) {
+                var searchNames = searchesWithExpiredDeadline.map(function(s) { return s.searchName; }).join(', ');
+                var disablePrompt = searchesWithExpiredDeadline.length === 1
+                    ? "Reducing by " + Math.abs(extensionDays) + " days would set '" + searchesWithExpiredDeadline[0].searchName + "' deadline to the past.\n\nDo you want to disable this search instead?"
+                    : "Reducing by " + Math.abs(extensionDays) + " days would set " + searchesWithExpiredDeadline.length + " searches' deadlines to the past.\n\nDo you want to disable these searches instead?";
+
+                if (confirm(disablePrompt)) {
+                    // Disable these searches instead
+                    disableSearchesFromExtendModal(searchesWithExpiredDeadline);
+                    return;
+                } else {
+                    // User cancelled - abort the reduction
+                    return;
+                }
+            }
+        }
 
         // Build condition for multiple searches
         var conditions = searches.map(function(s) {
+            console.log("performExtendDeadline: building condition for search:", s);
             return 'search_name="' + escapeString(s.searchName) + '"';
         }).join(' OR ');
 
+        console.log("performExtendDeadline: conditions=" + conditions);
+
+        // For negative values, we still add (which effectively subtracts)
         var searchQuery = '| inputlookup flagged_searches_lookup ' +
             '| eval remediation_deadline = if(' + conditions + ', remediation_deadline + ' + extensionSeconds + ', remediation_deadline)' +
             '| outputlookup flagged_searches_lookup';
 
-        showToast("Extending deadline...");
+        console.log("performExtendDeadline: executing query:", searchQuery);
+
+        var actionVerb = isReducing ? "Reducing" : "Extending";
+        showToast(actionVerb + " deadline...");
         $('#extendModalOverlay').removeClass('active');
 
         runSearch(searchQuery, function(err, results) {
+            console.log("performExtendDeadline: callback - err=" + err);
             if (err) {
-                alert("Error extending deadline: " + err);
+                alert("Error " + actionVerb.toLowerCase() + " deadline: " + err);
             } else {
+                // After update, check if any deadlines are now in the past (for searches without prior deadline info)
+                if (isReducing) {
+                    checkAndPromptForExpiredDeadlines(searches, extensionDays);
+                }
+
                 searches.forEach(function(s) {
-                    logAction("extended", s.searchName, "Deadline extended by " + extensionDays + " days");
+                    var logMsg = isReducing
+                        ? "Deadline reduced by " + Math.abs(extensionDays) + " days"
+                        : "Deadline extended by " + extensionDays + " days";
+                    logAction(isReducing ? "reduced" : "extended", s.searchName, logMsg);
                 });
                 var msg = searches.length === 1
-                    ? "Deadline for '" + searches[0].searchName + "' extended by " + extensionDays + " days."
-                    : "Deadlines for " + searches.length + " searches extended by " + extensionDays + " days.";
+                    ? "Deadline for '" + searches[0].searchName + "' " + (isReducing ? "reduced" : "extended") + " by " + Math.abs(extensionDays) + " days."
+                    : "Deadlines for " + searches.length + " searches " + (isReducing ? "reduced" : "extended") + " by " + Math.abs(extensionDays) + " days.";
                 showToast("✓ " + msg);
                 refreshDashboard();
+            }
+        });
+    }
+
+    // Disable searches from the extend modal when deadline would go to past
+    function disableSearchesFromExtendModal(searches) {
+        console.log("disableSearchesFromExtendModal:", searches);
+
+        var localePrefix = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
+        localePrefix = localePrefix ? '/' + localePrefix[1] : '';
+
+        var successCount = 0;
+        var failCount = 0;
+        var totalCount = searches.length;
+
+        showToast("Disabling " + totalCount + " search(es)...");
+        $('#extendModalOverlay').removeClass('active');
+
+        searches.forEach(function(search, idx) {
+            var disableUrl = localePrefix + '/splunkd/__raw/servicesNS/-/' +
+                encodeURIComponent(search.app || 'search') + '/saved/searches/' +
+                encodeURIComponent(search.searchName) + '/disable';
+
+            $.ajax({
+                url: disableUrl,
+                type: 'POST',
+                data: { output_mode: 'json' },
+                success: function() {
+                    successCount++;
+                    logAction("disabled", search.searchName, "Disabled due to deadline expiration");
+                    checkComplete();
+                },
+                error: function(xhr) {
+                    console.error("Failed to disable search:", search.searchName, xhr.status);
+                    failCount++;
+                    checkComplete();
+                }
+            });
+
+            // Update the lookup status to "disabled"
+            var updateQuery = '| inputlookup flagged_searches_lookup | eval status=if(search_name="' + escapeString(search.searchName) + '", "disabled", status) | outputlookup flagged_searches_lookup';
+            runSearch(updateQuery);
+        });
+
+        function checkComplete() {
+            if (successCount + failCount === totalCount) {
+                var msg = successCount === totalCount
+                    ? "✓ Disabled " + successCount + " search(es)"
+                    : "Disabled " + successCount + "/" + totalCount + " search(es)";
+                showToast(msg);
+                refreshDashboard();
+            }
+        }
+    }
+
+    // Check for expired deadlines after reduction and prompt to disable
+    function checkAndPromptForExpiredDeadlines(searches, extensionDays) {
+        var conditions = searches.map(function(s) {
+            return 'search_name="' + escapeString(s.searchName) + '"';
+        }).join(' OR ');
+
+        var checkQuery = '| inputlookup flagged_searches_lookup | search ' + conditions +
+            ' | eval days_remaining = round((remediation_deadline - now()) / 86400, 2)' +
+            ' | where days_remaining <= 0 AND status!="disabled"' +
+            ' | table search_name, search_owner, search_app, days_remaining';
+
+        runSearch(checkQuery, function(err, results) {
+            if (!err && results && results.length > 0) {
+                var expiredSearches = results.map(function(r) {
+                    return {
+                        searchName: r.search_name,
+                        owner: r.search_owner,
+                        app: r.search_app
+                    };
+                });
+
+                var disablePrompt = expiredSearches.length === 1
+                    ? "'" + expiredSearches[0].searchName + "' now has an expired deadline.\n\nDo you want to disable this search?"
+                    : expiredSearches.length + " searches now have expired deadlines.\n\nDo you want to disable these searches?";
+
+                if (confirm(disablePrompt)) {
+                    disableSearchesFromExtendModal(expiredSearches);
+                }
             }
         });
     }
@@ -1021,18 +1212,15 @@ require([
     var unflagInProgress = false;
 
     window.unflagSearch = function() {
-        console.log("unflagSearch called, inProgress:", unflagInProgress);
-
         // Prevent duplicate calls - use longer timeout to handle alert blocking
         if (unflagInProgress) {
-            console.log("unflagSearch: already in progress, skipping");
             return;
         }
         unflagInProgress = true;
-        // Use 3000ms timeout because alert() blocks JS but timers still run
         setTimeout(function() { unflagInProgress = false; }, 3000);
 
         var searches = getSelectedSearches();
+
         if (searches.length === 0) {
             var searchName = getToken("manage_search");
             if (!searchName) {
@@ -1184,20 +1372,20 @@ require([
                             '<span class="cron-search-info-value" id="cronModalApp">-</span>' +
                         '</div>' +
                     '</div>' +
-                    '<div class="cron-section-title">Quick Presets</div>' +
+                    '<div class="cron-section-title">Quick Presets <span style="font-size: 10px; color: rgba(255,255,255,0.5); font-weight: normal;">(with scheduler-friendly offsets)</span></div>' +
                     '<div class="cron-preset-grid">' +
-                        '<div class="cron-preset-btn" data-cron="*/5 * * * *"><div class="cron-preset-label">Every 5 Min</div><div class="cron-preset-cron">*/5 * * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="*/15 * * * *"><div class="cron-preset-label">Every 15 Min</div><div class="cron-preset-cron">*/15 * * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="*/30 * * * *"><div class="cron-preset-label">Every 30 Min</div><div class="cron-preset-cron">*/30 * * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 * * * *"><div class="cron-preset-label">Hourly</div><div class="cron-preset-cron">0 * * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 */2 * * *"><div class="cron-preset-label">Every 2 Hours</div><div class="cron-preset-cron">0 */2 * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 */4 * * *"><div class="cron-preset-label">Every 4 Hours</div><div class="cron-preset-cron">0 */4 * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 */6 * * *"><div class="cron-preset-label">Every 6 Hours</div><div class="cron-preset-cron">0 */6 * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 */12 * * *"><div class="cron-preset-label">Twice Daily</div><div class="cron-preset-cron">0 */12 * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 0 * * *"><div class="cron-preset-label">Daily Midnight</div><div class="cron-preset-cron">0 0 * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 6 * * *"><div class="cron-preset-label">Daily 6 AM</div><div class="cron-preset-cron">0 6 * * *</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 0 * * 0"><div class="cron-preset-label">Weekly</div><div class="cron-preset-cron">0 0 * * 0</div></div>' +
-                        '<div class="cron-preset-btn" data-cron="0 0 1 * *"><div class="cron-preset-label">Monthly</div><div class="cron-preset-cron">0 0 1 * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="3-59/5 * * * *"><div class="cron-preset-label">Every 5 Min</div><div class="cron-preset-cron">3-59/5 * * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="7,22,37,52 * * * *"><div class="cron-preset-label">Every 15 Min</div><div class="cron-preset-cron">7,22,37,52 * * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="11,41 * * * *"><div class="cron-preset-label">Every 30 Min</div><div class="cron-preset-cron">11,41 * * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="3 * * * *"><div class="cron-preset-label">Hourly</div><div class="cron-preset-cron">3 * * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="7 */2 * * *"><div class="cron-preset-label">Every 2 Hours</div><div class="cron-preset-cron">7 */2 * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="13 */4 * * *"><div class="cron-preset-label">Every 4 Hours</div><div class="cron-preset-cron">13 */4 * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="17 */6 * * *"><div class="cron-preset-label">Every 6 Hours</div><div class="cron-preset-cron">17 */6 * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="23 */12 * * *"><div class="cron-preset-label">Twice Daily</div><div class="cron-preset-cron">23 */12 * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="19 0 * * *"><div class="cron-preset-label">Daily ~Midnight</div><div class="cron-preset-cron">19 0 * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="11 6 * * *"><div class="cron-preset-label">Daily ~6 AM</div><div class="cron-preset-cron">11 6 * * *</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="29 0 * * 0"><div class="cron-preset-label">Weekly</div><div class="cron-preset-cron">29 0 * * 0</div></div>' +
+                        '<div class="cron-preset-btn" data-cron="37 0 1 * *"><div class="cron-preset-label">Monthly</div><div class="cron-preset-cron">37 0 1 * *</div></div>' +
                     '</div>' +
                     '<div class="cron-section-title">Custom Schedule</div>' +
                     '<div class="cron-input-section">' +
@@ -1365,6 +1553,8 @@ require([
                     '<button class="btn" style="background: #2ea043; border-color: #2ea043; color: white; display: none;" id="metricPopupApprove">✓ Approve & Unflag</button>' +
                     '<button class="btn" style="background: #f8be34; border-color: #f8be34; color: #000; display: none;" id="metricPopupReject">✗ Reject Review</button>' +
                     '<button class="btn" style="background: #5cc05c; border-color: #5cc05c; color: white; display: none;" id="metricPopupEnable">Enable Selected</button>' +
+                    '<button class="btn" style="background: #f0ad4e; border-color: #f0ad4e; color: #000; display: none;" id="metricPopupFlag">🚩 Flag Selected</button>' +
+                    '<button class="btn" style="background: #17a2b8; border-color: #17a2b8; color: white; display: none;" id="metricPopupUnflag">✓ Unflag Selected</button>' +
                     '<button class="btn" style="background: #dc4e41; border-color: #dc4e41; color: white;" id="metricPopupDisable">Disable Selected</button>' +
                     '<button class="btn btn-primary" id="metricPopupExtend">Extend Deadline</button>' +
                     '<button class="btn btn-secondary" id="metricPopupClose">Close</button>' +
@@ -1411,11 +1601,12 @@ require([
             $('.extend-days-btn').removeClass('active');
             $(this).addClass('active');
             currentExtendDays = parseInt($(this).data('days'));
-            $('#extendCustomDays').val('');
+            // Populate custom input with selected preset value
+            $('#extendCustomDays').val(currentExtendDays);
             updateExtendPreview();
         });
 
-        $(document).on('input', '#extendCustomDays', function() {
+        $(document).on('input change', '#extendCustomDays', function() {
             var val = parseInt($(this).val());
             if (val > 0) {
                 $('.extend-days-btn').removeClass('active');
@@ -1463,10 +1654,219 @@ require([
             $('.metric-row-checkbox').prop('checked', isChecked);
         });
 
-        // Metric popup row click to toggle checkbox
-        $(document).on('click', '.metric-popup-row td:not(:first-child)', function() {
+        // Metric popup row click to toggle checkbox (exclude status dropdown)
+        $(document).on('click', '.metric-popup-row td:not(:first-child)', function(e) {
+            // Don't toggle checkbox if clicking on status dropdown
+            if ($(e.target).closest('.status-dropdown-wrapper').length > 0) {
+                return;
+            }
             var $checkbox = $(this).closest('tr').find('.metric-row-checkbox');
             $checkbox.prop('checked', !$checkbox.prop('checked'));
+        });
+
+        // Status dropdown click handler - show status change menu
+        $(document).on('click', '.status-dropdown-wrapper', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var $wrapper = $(this);
+            var searchName = $wrapper.data('search');
+            var owner = $wrapper.data('owner') || 'unknown';
+            var app = $wrapper.data('app') || 'unknown';
+            var currentStatus = $wrapper.data('current-status');
+
+            // Remove any existing dropdown menu
+            $('.status-dropdown-menu').remove();
+
+            // Check if we're in suspicious modal (unflagged searches)
+            var isSuspiciousModal = window.currentMetricType === 'suspicious';
+
+            // Available status options based on context
+            var statuses;
+            if (isSuspiciousModal) {
+                // Suspicious searches can only be flagged
+                statuses = [
+                    { value: 'pending', label: 'Flag for Review', color: '#f8991d' }
+                ];
+            } else {
+                // Flagged searches have full status options
+                statuses = [
+                    { value: 'pending', label: 'Flagged', color: '#f8991d' },
+                    { value: 'notified', label: 'Notified', color: '#f8be34' },
+                    { value: 'review', label: 'Pending Review', color: '#6f42c1' },
+                    { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
+                    { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
+                ];
+            }
+
+            var menuHtml = '<div class="status-dropdown-menu" style="position: absolute; top: 100%; left: 0; z-index: 10000; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); min-width: 160px;">';
+            statuses.forEach(function(s) {
+                var isSelected = currentStatus && currentStatus.toLowerCase().indexOf(s.value) > -1;
+                menuHtml += '<div class="status-option" data-status="' + s.value + '" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" data-app="' + escapeHtml(app) + '" data-is-suspicious="' + (isSuspiciousModal ? 'true' : 'false') + '" style="padding: 8px 12px; cursor: pointer; color: ' + s.color + '; border-bottom: 1px solid #333;' + (isSelected ? ' background: rgba(255,255,255,0.1);' : '') + '">' +
+                    (isSelected ? '✓ ' : '') + s.label + '</div>';
+            });
+            menuHtml += '</div>';
+
+            $wrapper.append(menuHtml);
+
+            // Close menu when clicking elsewhere
+            $(document).one('click', function() {
+                $('.status-dropdown-menu').remove();
+            });
+        });
+
+        // Handle status option selection
+        $(document).on('click', '.status-option', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var newStatus = $(this).data('status');
+            var searchName = $(this).data('search');
+            var owner = $(this).data('owner') || 'unknown';
+            var app = $(this).data('app') || 'unknown';
+            var isSuspicious = $(this).data('is-suspicious') === 'true';
+
+            // Close menu
+            $('.status-dropdown-menu').remove();
+
+            showToast('Updating status...');
+
+            var updateQuery;
+
+            if (isSuspicious && newStatus === 'pending') {
+                // For suspicious (unflagged) searches, we need to CREATE a new entry in the lookup
+                var now = Math.floor(Date.now() / 1000);
+                var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
+                var reason = "Flagged from Suspicious Searches panel";
+
+                updateQuery = '| inputlookup flagged_searches_lookup ' +
+                    '| append [| makeresults | eval search_name="' + escapeString(searchName) + '", ' +
+                    'search_owner="' + escapeString(owner) + '", ' +
+                    'search_app="' + escapeString(app) + '", ' +
+                    'flagged_by="' + escapeString(currentUser) + '", ' +
+                    'flagged_time=' + now + ', ' +
+                    'notification_sent=0, ' +
+                    'notification_time=0, ' +
+                    'remediation_deadline=' + deadline + ', ' +
+                    'status="pending", ' +
+                    'reason="' + escapeString(reason) + '", ' +
+                    'notes="" | fields - _time] ' +
+                    '| dedup search_name ' +
+                    '| outputlookup flagged_searches_lookup';
+            } else {
+                // For already flagged searches, just update the status
+                updateQuery = '| inputlookup flagged_searches_lookup ' +
+                    '| eval status = if(search_name="' + escapeString(searchName) + '", "' + newStatus + '", status)' +
+                    '| outputlookup flagged_searches_lookup';
+            }
+
+            runSearch(updateQuery, function(err, results) {
+                if (err) {
+                    showToast('Error updating status');
+                } else {
+                    logAction('status_changed', searchName, 'Status changed to ' + newStatus);
+                    showToast('✓ Status updated to ' + newStatus);
+
+                    // Update the badge in the UI
+                    var $wrapper = $('.status-dropdown-wrapper[data-search="' + searchName + '"]');
+                    $wrapper.data('current-status', newStatus);
+                    $wrapper.find('.status-badge').parent().html(getStatusBadges(newStatus) + '<span style="margin-left: 4px; font-size: 10px; opacity: 0.7;">▼</span>');
+
+                    // Refresh dashboard to update counts
+                    if (newStatus === 'resolved' || isSuspicious) {
+                        refreshDashboard();
+                        // Close modal since item should be gone from current view
+                        if (isSuspicious) {
+                            setTimeout(function() {
+                                $('#metricPopupOverlay').removeClass('active');
+                            }, 500);
+                        }
+                    }
+                }
+            });
+        });
+
+        // Metric popup Flag button - for flagging suspicious unflagged searches
+        $(document).on('click', '#metricPopupFlag', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to flag.');
+                return;
+            }
+
+            console.log('Flagging searches from metric popup:', selectedSearches);
+
+            // Close metric popup and use existing flag functionality
+            $('#metricPopupOverlay').removeClass('active');
+
+            // Flag each selected search
+            var flagCount = 0;
+            var errorCount = 0;
+            var reason = "Flagged from Suspicious Searches panel - potentially inefficient or wasteful search patterns detected";
+            var remediationDays = 7;
+            var remediationDeadline = Math.floor(Date.now() / 1000) + (remediationDays * 86400);
+
+            // Store the flagged searches for potential extend deadline
+            var flaggedSearchesForExtend = [];
+
+            selectedSearches.forEach(function(search) {
+                var searchQuery = '| inputlookup flagged_searches_lookup ' +
+                    '| append [| makeresults | eval search_name="' + escapeString(search.name) + '", ' +
+                    'search_owner="' + escapeString(search.owner || 'unknown') + '", ' +
+                    'search_app="' + escapeString(search.app || 'unknown') + '", ' +
+                    'reason="' + escapeString(reason) + '", ' +
+                    'status="pending", ' +
+                    'flagged_time=' + Math.floor(Date.now() / 1000) + ', ' +
+                    'remediation_deadline=' + remediationDeadline + ' | fields - _time] ' +
+                    '| dedup search_name ' +
+                    '| outputlookup flagged_searches_lookup';
+
+                runSearch(searchQuery, function(err, results) {
+                    flagCount++;
+                    if (err) {
+                        console.error('Error flagging search:', search.name, err);
+                        errorCount++;
+                    } else {
+                        logAction('flagged', search.name, reason);
+                        // Add to list for potential extend
+                        flaggedSearchesForExtend.push({
+                            searchName: search.name,
+                            owner: search.owner,
+                            app: search.app,
+                            status: 'pending',
+                            deadlineEpoch: remediationDeadline,
+                            daysRemaining: remediationDays
+                        });
+                    }
+
+                    // Show success message when all done
+                    if (flagCount === selectedSearches.length) {
+                        var successCount = flagCount - errorCount;
+                        showToast('✓ Flagged ' + successCount + ' search(es) for governance review');
+                        refreshDashboard();
+
+                        // Offer to extend deadline or view in flagged modal
+                        if (successCount > 0) {
+                            setTimeout(function() {
+                                var action = confirm(
+                                    'Successfully flagged ' + successCount + ' search(es) with a ' + remediationDays + '-day deadline.\n\n' +
+                                    'Would you like to adjust the deadline now?\n\n' +
+                                    'Click OK to open the Extend Deadline modal.\n' +
+                                    'Click Cancel to view in the Flagged modal.'
+                                );
+
+                                if (action) {
+                                    // Open extend modal with the just-flagged searches
+                                    openExtendModal(flaggedSearchesForExtend);
+                                } else {
+                                    // Open flagged modal to see the searches
+                                    openMetricPopup('flagged', successCount, 'Currently Flagged');
+                                }
+                            }, 500);
+                        }
+                    }
+                });
+            });
         });
 
         // Metric popup Disable button
@@ -1523,6 +1923,25 @@ require([
                         success: function() {
                             console.log('Successfully disabled:', search.name, 'using context:', ctx);
                             successCount++;
+
+                            // Update the lookup status to "disabled" so it persists when modal reopens
+                            var updateQuery = '| inputlookup flagged_searches_lookup | eval status=if(search_name="' + escapeString(search.name) + '", "disabled", status) | outputlookup flagged_searches_lookup';
+                            runSearch(updateQuery, function(err) {
+                                if (err) {
+                                    console.error('Failed to update lookup for:', search.name, err);
+                                } else {
+                                    console.log('Updated lookup status to disabled for:', search.name);
+                                }
+                            });
+
+                            // Also update the governance_search_cache.csv to mark as disabled
+                            var updateCacheQuery = '| inputlookup governance_search_cache.csv | eval disabled=if(title="' + escapeString(search.name) + '", "1", disabled) | outputlookup governance_search_cache.csv';
+                            runSearch(updateCacheQuery, function(err) {
+                                if (err) {
+                                    console.error('Failed to update cache for:', search.name, err);
+                                }
+                            });
+
                             updateDisabledRowUI(search);
                             if (successCount + failCount === totalCount) {
                                 showDisableComplete(successCount, failCount);
@@ -1826,6 +2245,35 @@ require([
             }
         }
 
+        // Show/hide buttons based on metric type (suspicious unflagged vs flagged)
+        function updateMetricTypeButtons(metricType) {
+            if (metricType === 'suspicious') {
+                // For suspicious unflagged searches: show Flag, hide Extend/Disable/Unflag
+                $('#metricPopupFlag').show();
+                $('#metricPopupUnflag').hide();
+                $('#metricPopupExtend').hide();
+                $('#metricPopupDisable').hide();
+            } else if (metricType === 'flagged' || metricType === 'expiring') {
+                // For flagged/expiring searches: show Extend/Disable/Unflag, hide Flag
+                $('#metricPopupFlag').hide();
+                $('#metricPopupUnflag').show();
+                $('#metricPopupExtend').show();
+                $('#metricPopupDisable').show();
+            } else if (metricType === 'disabled') {
+                // For disabled searches: show Unflag/Enable, hide Flag/Extend/Disable
+                $('#metricPopupFlag').hide();
+                $('#metricPopupUnflag').show();
+                $('#metricPopupExtend').hide();
+                $('#metricPopupDisable').hide();
+            } else {
+                // Default (total): hide Flag/Unflag, show Disable
+                $('#metricPopupFlag').hide();
+                $('#metricPopupUnflag').hide();
+                $('#metricPopupExtend').hide();
+                $('#metricPopupDisable').show();
+            }
+        }
+
         // Show completion message for disable action
         function showDisableComplete(successCount, failCount) {
             var $footer = $('#metricPopupOverlay .metric-popup-footer');
@@ -1851,6 +2299,9 @@ require([
 
             $msg.html(html);
 
+            // Refresh the dashboard to update the underlying table with new status
+            refreshDashboard();
+
             // Don't auto-clear if there are items needing attention
             if (needsUnflagCount === 0) {
                 setTimeout(function() {
@@ -1858,6 +2309,55 @@ require([
                 }, 5000);
             }
         }
+
+        // Metric popup Unflag button - remove searches from flagged list
+        $(document).on('click', '#metricPopupUnflag', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to unflag.');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to unflag ' + selectedSearches.length + ' search(es)?\n\nThis will remove them from governance tracking.')) {
+                return;
+            }
+
+            console.log('Unflagging searches:', selectedSearches);
+
+            // Build condition for removing from lookup
+            var conditions = selectedSearches.map(function(s) {
+                return 'search_name!="' + escapeString(s.name) + '"';
+            }).join(' AND ');
+
+            var unflagQuery = '| inputlookup flagged_searches_lookup | where ' + conditions + ' | outputlookup flagged_searches_lookup';
+
+            showToast('Unflagging ' + selectedSearches.length + ' search(es)...');
+
+            runSearch(unflagQuery, function(err, results) {
+                if (err) {
+                    console.error('Error unflagging:', err);
+                    showToast('Error unflagging searches');
+                } else {
+                    // Log actions
+                    selectedSearches.forEach(function(s) {
+                        logAction('unflagged', s.name, 'Removed from governance tracking');
+                    });
+
+                    showToast('✓ Unflagged ' + selectedSearches.length + ' search(es)');
+
+                    // Update UI - remove unflagged rows from modal
+                    selectedSearches.forEach(function(s) {
+                        var $row = $('.metric-popup-row').filter(function() {
+                            return $(this).find('td:eq(1)').text().trim() === s.name;
+                        });
+                        $row.fadeOut(300, function() { $(this).remove(); });
+                    });
+
+                    // Refresh dashboard
+                    refreshDashboard();
+                }
+            });
+        });
 
         // Metric popup Extend button
         $(document).on('click', '#metricPopupExtend', function() {
@@ -1867,9 +2367,35 @@ require([
                 return;
             }
 
+            // Check if any selected searches are NOT flagged (must be in pending/notified/disabled/review status)
+            var flaggedStatuses = ['pending', 'notified', 'disabled', 'review', 'flagged', 'expiring'];
+            var nonFlaggedSearches = selectedSearches.filter(function(s) {
+                var status = (s.status || '').toLowerCase();
+                return !flaggedStatuses.some(function(fs) { return status.indexOf(fs) > -1; });
+            });
+
+            if (nonFlaggedSearches.length > 0) {
+                var names = nonFlaggedSearches.map(function(s) { return s.name; }).join('\n• ');
+                alert('Cannot extend deadline: The following search(es) are not flagged:\n\n• ' + names + '\n\nOnly flagged searches can have their deadline extended. Please flag these searches first.');
+                return;
+            }
+
+            // Map metric popup format (name, owner, app) to expected format (searchName, owner, app)
+            // Include deadlineEpoch for negative extension validation
+            var mappedSearches = selectedSearches.map(function(s) {
+                return {
+                    searchName: s.name,
+                    owner: s.owner,
+                    app: s.app,
+                    status: s.status,
+                    deadlineEpoch: s.deadlineEpoch,
+                    daysRemaining: s.daysRemaining
+                };
+            });
+
             // Close metric popup and open extend modal
             $('#metricPopupOverlay').removeClass('active');
-            openExtendModal(selectedSearches);
+            openExtendModal(mappedSearches);
         });
 
         // Submit for Review button - allows users to submit remediated searches for admin review
@@ -1976,10 +2502,16 @@ require([
 
                 showToast('✓ ' + searches.length + ' search(es) submitted for review');
 
-                // Refresh
+                // Refresh modal content (don't close the modal)
                 setTimeout(function() {
                     refreshDashboard();
-                    $('#metricPopupOverlay').removeClass('active');
+                    // Re-open the same modal type to refresh its data
+                    if (window.currentMetricType) {
+                        var currentType = window.currentMetricType;
+                        var currentTitle = $('#metricPopupTitle').text();
+                        var currentValue = $('#metricPopupValue').text();
+                        openMetricPopup(currentType, currentValue, currentTitle);
+                    }
                 }, 1000);
             });
         }
@@ -2012,9 +2544,16 @@ require([
 
                 showToast('✓ ' + searches.length + ' search(es) approved and unflagged');
 
+                // Refresh modal content (don't close the modal)
                 setTimeout(function() {
                     refreshDashboard();
-                    $('#metricPopupOverlay').removeClass('active');
+                    // Re-open the same modal type to refresh its data
+                    if (window.currentMetricType) {
+                        var currentType = window.currentMetricType;
+                        var currentTitle = $('#metricPopupTitle').text();
+                        var currentValue = $('#metricPopupValue').text();
+                        openMetricPopup(currentType, currentValue, currentTitle);
+                    }
                 }, 1000);
             });
         }
@@ -2048,9 +2587,16 @@ require([
 
                 showToast('✗ ' + searches.length + ' review(s) rejected - timer reset with 7 days');
 
+                // Refresh modal content (don't close the modal)
                 setTimeout(function() {
                     refreshDashboard();
-                    $('#metricPopupOverlay').removeClass('active');
+                    // Re-open the same modal type to refresh its data
+                    if (window.currentMetricType) {
+                        var currentType = window.currentMetricType;
+                        var currentTitle = $('#metricPopupTitle').text();
+                        var currentValue = $('#metricPopupValue').text();
+                        openMetricPopup(currentType, currentValue, currentTitle);
+                    }
                 }, 1000);
             });
         }
@@ -2111,6 +2657,19 @@ require([
 
                     console.log("Token triggered metric popup:", value, metricValue, title);
 
+                    // If token returns "0", try to get actual value from the DOM
+                    if (metricValue === '0' || metricValue === 0) {
+                        var panelSelector = '#' + value + '_metric_panel .single-result';
+                        var $panel = $(panelSelector);
+                        if ($panel.length) {
+                            var actualValue = $panel.text().trim();
+                            if (actualValue && actualValue !== '0') {
+                                console.log("Token had '0', using DOM value instead:", actualValue);
+                                metricValue = actualValue;
+                            }
+                        }
+                    }
+
                     // Always use openMetricPopup - it has the unified UI for all metric types
                     // The old openFlaggedModal was a separate modal but we now use the unified popup
                     openMetricPopup(value, metricValue, title);
@@ -2130,6 +2689,20 @@ require([
                     var metricTitle = defaultTokens.get('metric_popup_title') || value;
 
                     console.log("Drilldown triggered metric popup:", value, metricValue, metricTitle);
+
+                    // If drilldown returns "0", try to get actual value from the DOM
+                    // $click.value$ returns "0" for single value panels instead of the actual number
+                    if (metricValue === '0' || metricValue === 0) {
+                        var panelSelector = '#' + value + '_metric_panel .single-result';
+                        var $panel = $(panelSelector);
+                        if ($panel.length) {
+                            var actualValue = $panel.text().trim();
+                            if (actualValue && actualValue !== '0') {
+                                console.log("Drilldown had '0', using DOM value instead:", actualValue);
+                                metricValue = actualValue;
+                            }
+                        }
+                    }
 
                     openMetricPopup(value, metricValue, metricTitle);
 
@@ -2531,6 +3104,7 @@ require([
                         html += '<td style="padding: 12px; color: ' + daysColor + '; font-weight: 600;">' + daysLeft + '</td>';
                         html += '<td style="padding: 12px; text-align: center;">';
                         html += '<button class="flagged-action-btn" data-action="remind" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" style="background: #006d9c; border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 11px;">Remind</button>';
+                        html += '<button class="flagged-action-btn" data-action="unflag" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" style="background: #53a051; border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 11px;">Unflag</button>';
                         html += '<button class="flagged-action-btn" data-action="disable" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" style="background: #dc4e41; border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px;">Disable</button>';
                         html += '</td>';
                         html += '</tr>';
@@ -2548,9 +3122,40 @@ require([
         var action = $(this).data('action');
         var searchName = $(this).data('search');
         var owner = $(this).data('owner');
+        var $row = $(this).closest('tr');
 
         if (action === 'remind') {
             window.emailThisOwner(owner, searchName, 'Reminder: Your search requires attention');
+        } else if (action === 'unflag') {
+            if (!confirm('Unflag "' + searchName + '" and remove from governance tracking?')) {
+                return;
+            }
+
+            // Remove from lookup by filtering it out
+            var unflagQuery = '| inputlookup flagged_searches_lookup | where search_name!="' + escapeString(searchName) + '" | outputlookup flagged_searches_lookup';
+
+            showToast('Unflagging search...');
+
+            runSearch(unflagQuery, function(err, results) {
+                if (err) {
+                    showToast('Error unflagging search');
+                } else {
+                    logAction('unflagged', searchName, 'Removed from governance tracking');
+                    showToast('✓ ' + searchName + ' unflagged');
+
+                    // Remove the row from the modal
+                    $row.fadeOut(300, function() {
+                        $(this).remove();
+                        // If no more rows, show empty message
+                        if ($('.flagged-row').length === 0) {
+                            $('#flaggedSearchesList').html('<div style="padding: 40px; text-align: center; color: rgba(255,255,255,0.5);">No flagged searches</div>');
+                        }
+                    });
+
+                    // Refresh dashboard
+                    refreshDashboard();
+                }
+            });
         } else if (action === 'disable') {
             setToken("manage_search", searchName);
             setToken("manage_owner", owner);
@@ -2803,10 +3408,10 @@ require([
         var searchQuery = '';
         switch (metricType) {
             case 'total':
-                searchQuery = '| inputlookup governance_search_cache.csv | search disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | eval status_display=if(isnotnull(flag_status), flag_status, "active") | table title, owner, app, status_display, frequency_label, monthly_cost | head 50';
+                searchQuery = '| inputlookup governance_search_cache.csv | where disabled="0" OR disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | eval status_display=if(isnotnull(flag_status), flag_status, "active") | table title, owner, app, status_display, frequency_label | head 50';
                 break;
             case 'suspicious':
-                searchQuery = '| inputlookup governance_search_cache.csv | search is_suspicious=1 disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | where isnull(flag_status) OR (flag_status!="pending" AND flag_status!="notified" AND flag_status!="disabled") | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason, monthly_cost | head 50';
+                searchQuery = '| inputlookup governance_search_cache.csv | where (disabled="0" OR disabled=0) AND is_suspicious=1 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | where isnull(flag_status) OR (flag_status!="pending" AND flag_status!="notified" AND flag_status!="disabled") | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason | head 50';
                 break;
             case 'flagged':
                 searchQuery = '| inputlookup flagged_searches_lookup | search status IN ("pending", "notified", "disabled", "review") | dedup search_name | eval status_display=status | eval deadline_epoch=remediation_deadline | eval days_remaining=round((remediation_deadline - now()) / 86400, 2) | table search_name, search_owner, search_app, status_display, reason, status, deadline_epoch, days_remaining | head 50';
@@ -2867,13 +3472,17 @@ require([
                             daysRemaining: daysRemaining
                         });
 
-                        // Create status badge(s)
+                        // Create status badge(s) - make clickable for status change
                         var statusBadge = getStatusBadges(statusDisplay);
+                        var clickableStatus = '<div class="status-dropdown-wrapper" data-search="' + escapeHtml(name) + '" data-owner="' + escapeHtml(owner) + '" data-app="' + escapeHtml(app) + '" data-current-status="' + escapeHtml(statusDisplay) + '" style="cursor: pointer; position: relative;" title="Click to change status">' +
+                            statusBadge +
+                            '<span style="margin-left: 4px; font-size: 10px; opacity: 0.7;">▼</span>' +
+                            '</div>';
 
                         html += '<tr class="metric-popup-row" data-index="' + i + '" data-search-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
                             '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
                             '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
-                            '<td style="padding: 8px;" class="status-cell">' + statusBadge + '</td>';
+                            '<td style="padding: 8px;" class="status-cell">' + clickableStatus + '</td>';
 
                         // Add countdown timer column for flagged/expiring metrics
                         if (hasFlaggedCountdown) {
@@ -2883,7 +3492,7 @@ require([
 
                         html += '<td style="padding: 8px;">' + escapeHtml(owner) + '</td>' +
                             '<td style="padding: 8px;">' + escapeHtml(app) + '</td>' +
-                            '<td style="padding: 8px; color: rgba(255,255,255,0.6);">' + escapeHtml(detail) + (extra ? ' | ' + escapeHtml(extra) : '') + '</td>' +
+                            '<td style="padding: 8px; color: rgba(255,255,255,0.6);">' + escapeHtml(detail || '-') + '</td>' +
                             '</tr>';
                     }
                     $('#metricPopupTableBody').html(html);
@@ -2898,6 +3507,9 @@ require([
 
                     // Show/hide buttons based on search statuses
                     updateReviewButtonsVisibility();
+
+                    // Show/hide buttons based on metric type
+                    updateMetricTypeButtons(metricType);
                 });
             }
         });
@@ -2989,9 +3601,10 @@ require([
             var isSuspiciousPanel = panelTitle.indexOf('Suspicious') > -1;
             var isCostPanel = panelTitle.indexOf('Highest Cost') > -1 || panelTitle.indexOf('Cost Impact') > -1;
             var isActivityPanel = panelTitle.indexOf('Activity') > -1 || panelTitle.indexOf('Audit') > -1 || panelTitle.indexOf('History') > -1;
+            var isConfigTable = $table.attr('id') === 'cost_config_table' || panelTitle.indexOf('Current Cost Configuration') > -1 || panelTitle.indexOf('Configuration') > -1;
 
-            // Skip checkbox enhancement for cost-only panels and activity/audit log panels
-            var skipCheckboxes = isCostPanel || isActivityPanel;
+            // Skip checkbox enhancement for cost-only panels, activity/audit log panels, and config tables
+            var skipCheckboxes = isCostPanel || isActivityPanel || isConfigTable;
 
             var scheduleColIndex = -1;
             var searchNameColIndex = -1;
@@ -2999,6 +3612,7 @@ require([
             var appColIndex = -1;
             var reasonColIndex = -1;
             var flaggedColIndex = -1;
+            var statusColIndex = -1;
             var dashboardColIndex = -1;
             var isDashboardTable = false;
 
@@ -3013,6 +3627,7 @@ require([
                 if (text === 'App') appColIndex = index;
                 if (text === 'Reason') reasonColIndex = index;
                 if (text === 'Flagged') flaggedColIndex = index;
+                if (text === 'Status') statusColIndex = index;
             });
 
             // Use Dashboard column as search name for dashboard tables
@@ -3051,11 +3666,21 @@ require([
                 var app = appColIndex >= 0 ? $cells.eq(appColIndex).text().trim() : '';
                 var reason = reasonColIndex >= 0 ? $cells.eq(reasonColIndex).text().trim() : '';
 
-                // Check flagged status from the Flagged column
+                // Check flagged status from the Flagged column or Status column
                 var isFlagged = false;
                 if (flaggedColIndex >= 0 && $cells.length > flaggedColIndex) {
                     var flaggedText = $cells.eq(flaggedColIndex).text().trim().toLowerCase();
                     isFlagged = (flaggedText === 'yes');
+                }
+                // Also check Status column for flagged states
+                if (!isFlagged && statusColIndex >= 0 && $cells.length > statusColIndex) {
+                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
+                    isFlagged = (statusText === 'flagged' || statusText === 'pending remediation' || statusText === 'disabled by governance');
+                }
+                // Also check if search name already has a flag emoji
+                if (!isFlagged && searchNameColIndex >= 0 && $cells.length > searchNameColIndex) {
+                    var searchCellText = $cells.eq(searchNameColIndex).text().trim();
+                    isFlagged = (searchCellText.indexOf('🚩') > -1 || searchCellText.indexOf('⚠️') > -1 || searchCellText.indexOf('🚫') > -1);
                 }
 
                 // In flagged panel, all are flagged
@@ -3063,8 +3688,8 @@ require([
                     isFlagged = true;
                 }
 
-                // Clean search name of any existing icons
-                searchName = searchName.replace(/^[\s⚑⚐🚩]+/, '').trim();
+                // Clean search name of any existing icons (status icons prepended by the search)
+                searchName = searchName.replace(/^[\s⚑⚐🚩⚠️🚫✓⚡]+/, '').trim();
 
                 if (!searchName) return;
 
@@ -3101,8 +3726,9 @@ require([
                 // Add flag icon ONLY on Search Name column, ONLY if flagged (red flag), NO yellow flags
                 if (!isFlaggedPanel && isFlagged && searchName) {
                     // Find the cell containing the search name by matching content (more reliable than index)
+                    // Use same emoji regex as line 3318 to match all possible status icons
                     var $searchNameCell = $cells.filter(function() {
-                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩]+/, '').trim();
+                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓⚡]+/, '').trim();
                         return cellText === searchName;
                     }).first();
 
@@ -3446,7 +4072,8 @@ require([
             } else if (btnId === 'send-reminder-btn' || btnText.indexOf('send reminder') > -1) {
                 handled = true;
                 window.sendReminder();
-            } else if (btnId === 'extend-deadline-btn' || btnText.indexOf('extend deadline') > -1) {
+            } else if (btnId === 'extend-deadline-btn' || (btnText.indexOf('extend deadline') > -1 && btnId !== 'metricPopupExtend' && btnId !== 'extendModalSave')) {
+                // Exclude metricPopupExtend and extendModalSave which have their own specific handlers
                 handled = true;
                 window.extendDeadline();
             } else if (btnId === 'disable-expiring-btn' || btnText.indexOf('disable expiring') > -1) {
@@ -3638,12 +4265,32 @@ require([
         setTimeout(enhanceScheduleColumns, 2000);
         setTimeout(enhanceScheduleColumns, 3000);
         setTimeout(enhanceScheduleColumns, 5000);
+        setTimeout(enhanceScheduleColumns, 8000);
 
-        // Watch for table updates
+        // Watch for table updates with multiple debounced calls
         if (typeof MutationObserver !== 'undefined') {
             var observer = new MutationObserver(function(mutations) {
+                // Check if any mutations affected tables
+                var tableAffected = mutations.some(function(m) {
+                    return m.target.tagName === 'TABLE' ||
+                           m.target.tagName === 'TBODY' ||
+                           m.target.tagName === 'TR' ||
+                           $(m.target).closest('table').length > 0 ||
+                           $(m.target).find('table').length > 0;
+                });
+
+                // Always run enhancement on mutation, with staggered timing
                 clearTimeout(window._enhanceTimer);
-                window._enhanceTimer = setTimeout(enhanceScheduleColumns, 300);
+                clearTimeout(window._enhanceTimer2);
+                clearTimeout(window._enhanceTimer3);
+
+                // Multiple staggered calls to catch various render timings
+                window._enhanceTimer = setTimeout(enhanceScheduleColumns, 500);
+                window._enhanceTimer2 = setTimeout(enhanceScheduleColumns, 1500);
+                if (tableAffected) {
+                    // If table was affected, run extra enhancement
+                    window._enhanceTimer3 = setTimeout(enhanceScheduleColumns, 3000);
+                }
             });
 
             observer.observe(document.body, {
@@ -3651,6 +4298,14 @@ require([
                 subtree: true
             });
         }
+
+        // Also re-enhance on Splunk search completion events
+        $(document).on('search:done search:progress', function() {
+            setTimeout(enhanceScheduleColumns, 500);
+            setTimeout(enhanceScheduleColumns, 1500);
+            // Also re-setup metric panel handlers in case panels were refreshed
+            setTimeout(setupMetricPanelClickHandlers, 2000);
+        });
 
         // Check auto-disable
         setTimeout(checkAutoDisable, 5000);

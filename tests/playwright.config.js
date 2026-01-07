@@ -3,6 +3,7 @@ const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './',
+  testMatch: '**/*.spec.js',  // Only match .spec.js files (Jest uses .test.js)
   testIgnore: ['**/unit/**', '**/node_modules/**'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

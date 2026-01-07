@@ -110,40 +110,35 @@ body.theme-dark .dashboard-body {
     padding: 20px 0 !important;
 }
 
-/* Metric-specific color enhancements */
+/* Metric-specific color enhancements - using solid colors for better visibility */
 #total_metric_panel .single-result {
-    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
+    color: #00d4ff !important;
+    -webkit-text-fill-color: #00d4ff !important;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 #suspicious_metric_panel .single-result {
-    background: linear-gradient(135deg, #f8be34 0%, #e6a61a 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
+    color: #f8be34 !important;
+    -webkit-text-fill-color: #f8be34 !important;
+    text-shadow: 0 0 30px rgba(248, 190, 52, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 #flagged_metric_panel .single-result {
-    background: linear-gradient(135deg, #dc4e41 0%, #c43832 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
+    color: #dc4e41 !important;
+    -webkit-text-fill-color: #dc4e41 !important;
+    text-shadow: 0 0 30px rgba(220, 78, 65, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 #expiring_metric_panel .single-result {
-    background: linear-gradient(135deg, #f1813f 0%, #e06820 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
+    color: #f1813f !important;
+    -webkit-text-fill-color: #f1813f !important;
+    text-shadow: 0 0 30px rgba(241, 129, 63, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 #disabled_metric_panel .single-result {
-    background: linear-gradient(135deg, #708794 0%, #5a6f7a 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
+    color: #708794 !important;
+    -webkit-text-fill-color: #708794 !important;
+    text-shadow: 0 0 30px rgba(112, 135, 148, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Single value viz container */
@@ -367,6 +362,111 @@ table tbody td {
 .action-buttons .btn-warning:hover {
     background-color: #e65f53;
     border-color: #e65f53;
+}
+
+/* ============================================
+   Settings Form Buttons
+   ============================================ */
+
+/* Settings form container */
+.settings-form {
+    margin-top: 10px !important;
+    display: flex !important;
+    gap: 10px !important;
+}
+
+/* Settings form buttons - ensure visibility */
+.settings-form .btn,
+.settings-form button,
+form.settings-form .btn,
+form.settings-form button {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: #006d9c !important;
+    border: 1px solid #006d9c !important;
+    color: #ffffff !important;
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.settings-form .btn:hover,
+.settings-form button:hover,
+form.settings-form .btn:hover,
+form.settings-form button:hover {
+    background-color: #0078a8 !important;
+    border-color: #0078a8 !important;
+}
+
+.settings-form .btn-primary,
+form.settings-form .btn-primary {
+    background-color: #006d9c !important;
+    border-color: #006d9c !important;
+}
+
+.settings-form .btn-primary:hover,
+form.settings-form .btn-primary:hover {
+    background-color: #0078a8 !important;
+    border-color: #0078a8 !important;
+}
+
+/* Green "Run Cache Now" button specifically */
+.settings-form button[style*="53a051"],
+.settings-form .btn[style*="53a051"] {
+    background-color: #53a051 !important;
+    border-color: #53a051 !important;
+}
+
+.settings-form button[style*="53a051"]:hover,
+.settings-form .btn[style*="53a051"]:hover {
+    background-color: #5db85a !important;
+    border-color: #5db85a !important;
+}
+
+/* ============================================
+   Settings Page Text and Panel Fixes
+   ============================================ */
+
+/* Prevent text overflow in settings panels */
+.dashboard-panel .html,
+.dashboard-panel p,
+.dashboard-panel .panel-body {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Settings page - panel content constraints */
+.dashboard-panel div[style*="background: linear-gradient"],
+.dashboard-panel div[style*="background: rgba"] {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+/* Settings page - paragraph text */
+.dashboard-panel p {
+    max-width: 100% !important;
+    word-break: break-word !important;
+}
+
+/* Cost config table - no checkboxes, no hover effects */
+#cost_config_table .gov-checkbox,
+#cost_config_table .gov-select-all,
+#cost_config_table .gov-checkbox-cell,
+#cost_config_table .gov-select-header {
+    display: none !important;
+}
+
+#cost_config_table tbody tr {
+    cursor: default !important;
+}
+
+#cost_config_table tbody tr:hover {
+    background: inherit !important;
 }
 
 /* Panel styling */

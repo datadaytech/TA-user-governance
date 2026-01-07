@@ -46,9 +46,16 @@
         <search>
           <query>| inputlookup governance_search_cache.csv
 | stats max(cache_time) as last_refresh count as total_searches
-| eval last_refresh_display = if(isnotnull(last_refresh), strftime(last_refresh, "%Y-%m-%d %H:%M:%S"), "Never")
-| eval display = last_refresh_display . " (" . total_searches . " searches cached)"
-| table display</query>
+| eval time_since = now() - last_refresh
+| eval time_ago = case(
+    time_since &lt; 60, round(time_since) . " seconds ago",
+    time_since &lt; 3600, round(time_since/60) . " minutes ago",
+    time_since &lt; 86400, round(time_since/3600, 1) . " hours ago",
+    1=1, round(time_since/86400, 1) . " days ago")
+| eval last_refresh_display = if(isnotnull(last_refresh), strftime(last_refresh, "%b %d, %Y %H:%M"), "Never")
+| eval display = if(isnotnull(last_refresh), last_refresh_display . " (" . time_ago . ")", "Never")
+| eval searches_count = total_searches . " searches"
+| table display, searches_count</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
           <refresh>30s</refresh>
@@ -56,6 +63,7 @@
         <option name="drilldown">none</option>
         <option name="colorBy">value</option>
         <option name="useColors">0</option>
+        <option name="underLabel">$result.searches_count$</option>
       </single>
     </panel>
   </row>
@@ -465,14 +473,26 @@
       <title>Detected Wasteful SPL Patterns</title>
       <html>
         <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 6px;">
-          <p style="color: rgba(255,255,255,0.7); margin-bottom: 12px;">The following patterns are automatically flagged as potentially wasteful:</p>
-          <table style="width: 100%; color: rgba(255,255,255,0.8);">
+          <p style="color: rgba(255,255,255,0.7); margin-bottom: 12px;"><strong>Default Patterns</strong> (automatically detected):</p>
+          <table style="width: 100%; color: rgba(255,255,255,0.8); margin-bottom: 15px;">
             <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">index=*</code></td><td>Searches scanning all indexes</td></tr>
             <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| join</code></td><td>Expensive join operations</td></tr>
             <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">| transaction</code></td><td>Transaction commands</td></tr>
             <tr><td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">earliest=-30d+</code></td><td>Extended time ranges (30+ days)</td></tr>
           </table>
-          <p style="color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 12px; margin-bottom: 0;"><em>To customize patterns, edit macros.conf</em></p>
+
+          <p style="color: rgba(255,255,255,0.7); margin-bottom: 8px;"><strong>Add Custom Pattern</strong>:</p>
+          <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="custom_pattern_input" placeholder="Enter SPL pattern (e.g., | append)"
+                   style="flex: 1; padding: 8px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; color: #fff;"/>
+            <input type="text" id="custom_pattern_desc" placeholder="Description"
+                   style="flex: 1; padding: 8px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; color: #fff;"/>
+            <button class="btn btn-primary" onclick="addWastefulPattern()">Add Pattern</button>
+          </div>
+
+          <div id="custom_patterns_list" style="margin-top: 10px;">
+            <p style="color: rgba(255,255,255,0.5); font-style: italic;">Loading custom patterns...</p>
+          </div>
         </div>
       </html>
     </panel>
@@ -518,46 +538,219 @@
             return;
           }
 
-          // Update the saved search schedule
-          var searchQuery = '| rest /servicesNS/admin/TA-user-governance/saved/searches/Governance%20-%20Populate%20Search%20Cache splunk_server=local ' +
-            '| eval cron_schedule="' + schedule + '" ' +
-            '| sendalert update_savedsearch';
-
-          // For now just save to settings
-          updateSetting('cache_schedule', schedule, 'Cache refresh schedule');
-          alert('Cache schedule updated to: ' + schedule + '\\n\\nNote: To apply immediately, use "Run Cache Now"');
-        }
-
-        function runCacheNow() {
-          var searchQuery = '| rest /servicesNS/-/-/saved/searches splunk_server=local ' +
-            '| search is_scheduled=1 ' +
-            '| head 100 ' +
-            '| rename eai:acl.owner as owner, eai:acl.app as app ' +
-            '| table title, owner, app, cron_schedule, disabled ' +
-            '| eval is_suspicious=0, suspicious_reason="", svc_per_run=20, monthly_cost=100, frequency_label="Daily", avg_runtime_display="30s", runtime_ratio=5, run_count=10, runs_per_month=30, avg_runtime_sec=30, max_runtime_sec=60, max_runtime_display="60s", runs_per_day=1, frequency_seconds=86400, monthly_svc=600, flag_status="", cache_time=now() ' +
-            '| outputlookup governance_search_cache.csv';
-
           require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
-            var cacheSearch = new SearchManager({
-              id: 'run_cache_' + Date.now(),
-              search: searchQuery,
+            // Update the saved search cron_schedule via REST API
+            var updateSearch = new SearchManager({
+              id: 'update_cache_schedule_' + Date.now(),
+              search: '| rest splunk_server=local /servicesNS/admin/TA-user-governance/saved/searches/Governance%20-%20Populate%20Search%20Cache ' +
+                      '| eval new_cron="' + schedule + '" ' +
+                      '| map maxsearches=1 search="| makeresults | eval status=\\"updating\\" | outputlookup governance_settings_lookup append=true where setting_name=\\"cache_schedule_update\\""',
               earliest_time: '-1h',
               latest_time: 'now',
               autostart: true
             });
 
-            showToast('Running cache refresh...');
+            // Use splunkjs Service to directly update the saved search
+            var service = mvc.createService();
+            var savedSearches = service.savedSearches({owner: 'admin', app: 'TA-user-governance'});
 
-            cacheSearch.on('search:done', function(props) {
-              showToast('Cache refreshed successfully! (' + (props.content.resultCount || 0) + ' searches cached)');
-              setTimeout(function() { location.reload(); }, 2000);
-            });
+            savedSearches.fetch(function(err, savedSearches) {
+              if (err) {
+                alert('Error fetching saved searches: ' + err);
+                return;
+              }
 
-            cacheSearch.on('search:error', function(err) {
-              alert('Error refreshing cache: ' + err);
+              var cacheSearch = savedSearches.item('Governance - Populate Search Cache');
+              if (cacheSearch) {
+                cacheSearch.update({cron_schedule: schedule}, function(err) {
+                  if (err) {
+                    alert('Error updating saved search schedule: ' + err);
+                  } else {
+                    // Also save to settings lookup for reference
+                    updateSetting('cache_schedule', schedule, 'Cache refresh schedule');
+                    showToast('Cache schedule updated to: ' + schedule);
+                  }
+                });
+              } else {
+                alert('Saved search "Governance - Populate Search Cache" not found');
+              }
             });
           });
         }
+
+        function runCacheNow() {
+          // Run the analyze_search_costs macro and store the job SID for loadjob access
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
+            showToast('Running cost analysis cache (this may take a moment)...');
+
+            // Run the macro with a long TTL so results persist for loadjob
+            var cacheSearch = new SearchManager({
+              id: 'cost_cache_' + Date.now(),
+              search: '| `analyze_search_costs` | eval cache_time=now()',
+              earliest_time: '-1h',
+              latest_time: 'now',
+              preview: false,
+              cache: false,
+              autostart: true
+            });
+
+            cacheSearch.on('search:done', function(props) {
+              var resultCount = props.content.resultCount || 0;
+              var sid = cacheSearch.job.sid;
+
+              // Store the SID in a lookup for subsequent loadjob access
+              var storeSidSearch = new SearchManager({
+                id: 'store_sid_' + Date.now(),
+                search: '| makeresults | eval cache_sid="' + sid + '", cache_time=now(), result_count=' + resultCount + ' | fields - _time | outputlookup governance_cache_sid_lookup',
+                earliest_time: '-1h',
+                latest_time: 'now',
+                autostart: true
+              });
+
+              storeSidSearch.on('search:done', function() {
+                showToast('Cache refreshed! SID: ' + sid.substring(0, 20) + '... (' + resultCount + ' searches)');
+
+                // Set the job TTL to 24 hours so loadjob can access it
+                setJobTTL(sid, 86400);
+
+                setTimeout(function() { location.reload(); }, 2000);
+              });
+            });
+
+            cacheSearch.on('search:error', function(err) {
+              alert('Error running cache: ' + (err.message || err));
+            });
+
+            cacheSearch.on('search:fail', function(err) {
+              alert('Cache failed: ' + (err.message || err));
+            });
+          });
+        }
+
+        function setJobTTL(sid, ttl) {
+          // Set the job TTL via REST API so loadjob can access results later
+          require(['jquery'], function($) {
+            $.ajax({
+              url: '/en-US/splunkd/__raw/services/search/jobs/' + encodeURIComponent(sid) + '/control',
+              type: 'POST',
+              data: { action: 'setttl', ttl: ttl },
+              success: function() {
+                console.log('Job TTL set to ' + ttl + ' seconds');
+              },
+              error: function(err) {
+                console.log('Could not set job TTL:', err);
+              }
+            });
+          });
+        }
+
+        // ============================================
+        // WASTEFUL SPL PATTERNS FUNCTIONS
+        // ============================================
+
+        function addWastefulPattern() {
+          var pattern = document.getElementById('custom_pattern_input').value.trim();
+          var description = document.getElementById('custom_pattern_desc').value.trim() || 'Custom pattern';
+
+          if (!pattern) {
+            alert('Please enter a pattern');
+            return;
+          }
+
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc'], function(SearchManager, mvc) {
+            var escapedPattern = pattern.replace(/"/g, '\\"').replace(/\|/g, '\\|');
+            var escapedDesc = description.replace(/"/g, '\\"');
+
+            var addSearch = new SearchManager({
+              id: 'add_wasteful_pattern_' + Date.now(),
+              search: '| inputlookup wasteful_patterns_lookup ' +
+                      '| append [| makeresults | eval pattern="' + escapedPattern + '", description="' + escapedDesc + '", added_by="' + (Splunk.util.getCurrentApp ? Splunk.util.getUsername() : 'admin') + '", added_time=now() | fields - _time] ' +
+                      '| dedup pattern ' +
+                      '| outputlookup wasteful_patterns_lookup',
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
+            });
+
+            addSearch.on('search:done', function() {
+              showToast('Pattern "' + pattern + '" added successfully');
+              document.getElementById('custom_pattern_input').value = '';
+              document.getElementById('custom_pattern_desc').value = '';
+              loadWastefulPatterns();
+            });
+
+            addSearch.on('search:error', function(err) {
+              alert('Error adding pattern: ' + err);
+            });
+          });
+        }
+
+        function removeWastefulPattern(pattern) {
+          if (!confirm('Remove pattern "' + pattern + '"?')) return;
+
+          require(['splunkjs/mvc/searchmanager'], function(SearchManager) {
+            var escapedPattern = pattern.replace(/"/g, '\\"').replace(/\|/g, '\\|');
+
+            var removeSearch = new SearchManager({
+              id: 'remove_wasteful_pattern_' + Date.now(),
+              search: '| inputlookup wasteful_patterns_lookup ' +
+                      '| search pattern!="' + escapedPattern + '" ' +
+                      '| outputlookup wasteful_patterns_lookup',
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
+            });
+
+            removeSearch.on('search:done', function() {
+              showToast('Pattern removed');
+              loadWastefulPatterns();
+            });
+          });
+        }
+
+        function loadWastefulPatterns() {
+          require(['splunkjs/mvc/searchmanager', 'splunkjs/mvc/resultslinkview'], function(SearchManager, ResultsLinkView) {
+            var loadSearch = new SearchManager({
+              id: 'load_wasteful_patterns_' + Date.now(),
+              search: '| inputlookup wasteful_patterns_lookup | table pattern, description',
+              earliest_time: '-1h',
+              latest_time: 'now',
+              autostart: true
+            });
+
+            loadSearch.on('search:done', function(props) {
+              var results = loadSearch.data('results', {output_mode: 'json_rows'});
+              if (results) {
+                results.on('data', function() {
+                  var rows = results.data().rows || [];
+                  var container = document.getElementById('custom_patterns_list');
+
+                  if (rows.length === 0) {
+                    container.innerHTML = '<p style="color: rgba(255,255,255,0.5); font-style: italic;">No custom patterns defined</p>';
+                    return;
+                  }
+
+                  var html = '<p style="color: rgba(255,255,255,0.7); margin-bottom: 8px;"><strong>Custom Patterns</strong>:</p>';
+                  html += '<table style="width: 100%; color: rgba(255,255,255,0.8);">';
+                  rows.forEach(function(row) {
+                    var pattern = row[0];
+                    var desc = row[1];
+                    html += '<tr>' +
+                            '<td style="padding: 6px 0;"><code style="background: rgba(0,109,156,0.3); padding: 2px 8px; border-radius: 3px;">' + pattern + '</code></td>' +
+                            '<td>' + desc + '</td>' +
+                            '<td style="width: 60px; text-align: right;"><button class="btn btn-default btn-small" onclick="removeWastefulPattern(\'' + pattern.replace(/'/g, "\\'") + '\')" style="padding: 2px 8px; font-size: 11px;">Remove</button></td>' +
+                            '</tr>';
+                  });
+                  html += '</table>';
+                  container.innerHTML = html;
+                });
+              }
+            });
+          });
+        }
+
+        // Load patterns on page load
+        setTimeout(loadWastefulPatterns, 2000);
 
         function showToast(message) {
           var toast = document.createElement('div');
