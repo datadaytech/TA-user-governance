@@ -576,8 +576,10 @@ form.settings-form .btn-primary:hover {
 }
 
 .status-ok {
-    background-color: rgba(83, 160, 81, 0.3);
-    color: #53a051;
+    background-color: rgba(46, 204, 113, 0.25);
+    color: #2ecc71;
+    text-shadow: 0 0 8px rgba(46, 204, 113, 0.5);
+    border: 1px solid rgba(46, 204, 113, 0.4);
 }
 
 .status-suspicious {

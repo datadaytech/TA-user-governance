@@ -1595,12 +1595,84 @@ require([
             '</div>' +
         '</div>';
 
+    // Reason Details Modal - shows why a search was flagged and solutions
+    var reasonModalHtml =
+        '<div class="cron-modal-overlay" id="reasonModalOverlay">' +
+            '<div class="cron-modal" style="max-width: 650px;">' +
+                '<div class="cron-modal-header" style="background: linear-gradient(90deg, rgba(248, 190, 52, 0.15) 0%, transparent 100%);">' +
+                    '<h2 style="color: #f8be34;"><span style="margin-right: 8px;">⚠️</span>Suspicious Search Details</h2>' +
+                    '<button class="cron-modal-close" id="reasonModalClose">&times;</button>' +
+                '</div>' +
+                '<div class="cron-modal-body" style="padding: 20px;">' +
+                    '<div id="reasonModalContent">' +
+                        '<div class="reason-section" style="margin-bottom: 20px;">' +
+                            '<div class="reason-label" style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Search Name</div>' +
+                            '<div id="reasonSearchName" style="color: #ffffff; font-size: 14px; font-weight: 500; word-break: break-word;"></div>' +
+                        '</div>' +
+                        '<div class="reason-section" style="margin-bottom: 20px;">' +
+                            '<div class="reason-label" style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Why It Was Flagged</div>' +
+                            '<div id="reasonDescription" style="background: rgba(248, 190, 52, 0.1); border: 1px solid rgba(248, 190, 52, 0.3); border-radius: 8px; padding: 15px; color: #f8be34;"></div>' +
+                        '</div>' +
+                        '<div class="reason-section">' +
+                            '<div class="reason-label" style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Recommended Solutions</div>' +
+                            '<div id="reasonSolutions" style="background: rgba(46, 204, 113, 0.1); border: 1px solid rgba(46, 204, 113, 0.3); border-radius: 8px; padding: 15px;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="cron-modal-footer">' +
+                    '<button class="btn btn-secondary" id="reasonModalCancel">Close</button>' +
+                    '<button class="btn" style="background: #53a051; border-color: #53a051; color: white;" id="reasonModalResolve">Mark as Resolved</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+    // Search Query Preview Modal - shows the underlying search SPL
+    var searchPreviewModalHtml =
+        '<div class="cron-modal-overlay" id="searchPreviewModalOverlay">' +
+            '<div class="cron-modal" style="max-width: 900px; width: 95%;">' +
+                '<div class="cron-modal-header" style="background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, transparent 100%);">' +
+                    '<h2 style="color: #00d4ff;"><span style="margin-right: 8px;">🔍</span>Search Query Preview</h2>' +
+                    '<button class="cron-modal-close" id="searchPreviewModalClose">&times;</button>' +
+                '</div>' +
+                '<div class="cron-modal-body" style="padding: 20px;">' +
+                    '<div id="searchPreviewModalContent">' +
+                        '<div class="search-preview-section" style="margin-bottom: 15px;">' +
+                            '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">Search Name</div>' +
+                            '<div id="searchPreviewName" style="color: #00d4ff; font-size: 14px; font-weight: 600; word-break: break-word;"></div>' +
+                        '</div>' +
+                        '<div class="search-preview-section" style="margin-bottom: 15px;">' +
+                            '<div style="display: flex; gap: 20px;">' +
+                                '<div style="flex: 1;">' +
+                                    '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">Owner</div>' +
+                                    '<div id="searchPreviewOwner" style="color: #ffffff; font-size: 13px;"></div>' +
+                                '</div>' +
+                                '<div style="flex: 1;">' +
+                                    '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">App</div>' +
+                                    '<div id="searchPreviewApp" style="color: #ffffff; font-size: 13px;"></div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="search-preview-section">' +
+                            '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">Search Query (SPL)</div>' +
+                            '<div id="searchPreviewQuery" style="background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; font-family: Monaco, Consolas, monospace; font-size: 12px; color: #e6e6e6; white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; line-height: 1.5;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="cron-modal-footer">' +
+                    '<button class="btn btn-secondary" id="searchPreviewModalCancel">Close</button>' +
+                    '<button class="btn" style="background: #00d4ff; border-color: #00d4ff; color: #000;" id="searchPreviewCopy">📋 Copy Query</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
     var currentCronSearch = { name: '', cron: '', owner: '', app: '' };
     var currentImpactSearch = { name: '', owner: '', app: '' };
     var currentExtendSearches = [];
     var currentExtendDays = 7;
     var selectedRow = { searchName: '', owner: '', app: '', reason: '', tableType: '' };
     var selectedSearches = []; // Array for multi-select
+    var currentReasonSearch = { name: '', reason: '' };
+    var currentSearchPreview = { name: '', owner: '', app: '', query: '' };
 
     function initModals() {
         if (!$('#cronModalOverlay').length) {
@@ -1618,6 +1690,55 @@ require([
         if (!$('#metricPopupOverlay').length) {
             $('body').append(metricPopupHtml);
         }
+        if (!$('#reasonModalOverlay').length) {
+            $('body').append(reasonModalHtml);
+        }
+        if (!$('#searchPreviewModalOverlay').length) {
+            $('body').append(searchPreviewModalHtml);
+        }
+
+        // Reason modal events
+        $(document).on('click', '#reasonModalClose, #reasonModalCancel', function() {
+            $('#reasonModalOverlay').removeClass('active');
+        });
+
+        $(document).on('click', '#reasonModalOverlay', function(e) {
+            if (e.target === this) {
+                $('#reasonModalOverlay').removeClass('active');
+            }
+        });
+
+        $(document).on('click', '#reasonModalResolve', function() {
+            if (currentReasonSearch.name) {
+                updateSearchStatus(currentReasonSearch.name, 'resolved');
+                $('#reasonModalOverlay').removeClass('active');
+            }
+        });
+
+        // Search preview modal events
+        $(document).on('click', '#searchPreviewModalClose, #searchPreviewModalCancel', function() {
+            $('#searchPreviewModalOverlay').removeClass('active');
+        });
+
+        $(document).on('click', '#searchPreviewModalOverlay', function(e) {
+            if (e.target === this) {
+                $('#searchPreviewModalOverlay').removeClass('active');
+            }
+        });
+
+        $(document).on('click', '#searchPreviewCopy', function() {
+            var query = currentSearchPreview.query;
+            if (query && navigator.clipboard) {
+                navigator.clipboard.writeText(query).then(function() {
+                    var $btn = $('#searchPreviewCopy');
+                    var originalText = $btn.text();
+                    $btn.text('✓ Copied!').css('background', '#53a051');
+                    setTimeout(function() {
+                        $btn.text(originalText).css('background', '#00d4ff');
+                    }, 1500);
+                });
+            }
+        });
 
         // Extend modal events
         $(document).on('click', '#extendModalClose, #extendModalCancel', function() {
@@ -1681,20 +1802,18 @@ require([
         }
         window.closeMetricPopup = closeMetricPopup;
 
-        // Metric popup select all checkbox
-        $(document).on('change', '#metricSelectAll', function() {
-            var isChecked = $(this).prop('checked');
-            $('.metric-row-checkbox').prop('checked', isChecked);
-        });
-
-        // Metric popup row click to toggle checkbox (exclude status dropdown)
-        $(document).on('click', '.metric-popup-row td:not(:first-child)', function(e) {
-            // Don't toggle checkbox if clicking on status dropdown
+        // Metric popup row click handler - no longer toggles checkbox, just visual feedback
+        $(document).on('click', '.metric-popup-row td', function(e) {
+            // Don't process if clicking on status dropdown
             if ($(e.target).closest('.status-dropdown-wrapper').length > 0) {
                 return;
             }
-            var $checkbox = $(this).closest('tr').find('.metric-row-checkbox');
-            $checkbox.prop('checked', !$checkbox.prop('checked'));
+            // Visual feedback only - status changes via dropdown
+            var $row = $(this).closest('tr');
+            $row.css('background-color', 'rgba(255,255,255,0.1)');
+            setTimeout(function() {
+                $row.css('background-color', '');
+            }, 200);
         });
 
         // Status dropdown click handler - show status change menu
@@ -1719,23 +1838,14 @@ require([
             // Check if search is already flagged (OK/Suspicious statuses can only be flagged, others have full options)
             var isUnflagged = currentStatus && (currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious');
 
-            // Available status options based on context
-            var statuses;
-            if (isSuspicious || isUnflagged) {
-                // Suspicious/unflagged searches can only be flagged
-                statuses = [
-                    { value: 'pending', label: 'Flag for Review', color: '#f8991d' }
-                ];
-            } else {
-                // Flagged searches have full status options
-                statuses = [
-                    { value: 'pending', label: 'Flagged', color: '#f8991d' },
-                    { value: 'notified', label: 'Notified', color: '#f8be34' },
-                    { value: 'review', label: 'Pending Review', color: '#6f42c1' },
-                    { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
-                    { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
-                ];
-            }
+            // All status options available in dropdown
+            var statuses = [
+                { value: 'pending', label: 'Flag for Review', color: '#f8991d' },
+                { value: 'notified', label: 'Notified', color: '#f8be34' },
+                { value: 'review', label: 'Pending Review', color: '#6f42c1' },
+                { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
+                { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
+            ];
 
             var menuHtml = '<div class="status-dropdown-menu" style="position: absolute; top: 100%; left: 0; z-index: 10000; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); min-width: 160px;">';
             statuses.forEach(function(s) {
@@ -1767,10 +1877,26 @@ require([
             // Also get parent wrapper's current status to check if unflagged
             var $wrapper = $(this).closest('.status-dropdown-wrapper');
             var currentStatus = $wrapper.data('current-status') || '';
-            var isUnflagged = currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious';
+            var currentStatusLower = currentStatus.toLowerCase();
+            var isUnflagged = currentStatusLower === 'ok' || currentStatusLower === 'suspicious';
+
+            // Check if already flagged (pending, notified, disabled, review states)
+            var isAlreadyFlagged = currentStatusLower === 'flagged' ||
+                                   currentStatusLower === 'pending' ||
+                                   currentStatusLower === 'notified' ||
+                                   currentStatusLower === 'disabled' ||
+                                   currentStatusLower === 'review' ||
+                                   currentStatusLower.indexOf('pending') > -1 ||
+                                   currentStatusLower.indexOf('disabled') > -1;
 
             // Close menu
             $('.status-dropdown-menu').remove();
+
+            // If trying to flag an already flagged search, show error
+            if (newStatus === 'pending' && isAlreadyFlagged) {
+                alert('This search is already flagged.\n\nCurrent status: ' + currentStatus + '\n\nUse a different status option to change its state.');
+                return;
+            }
 
             showToast('Updating status...');
 
@@ -2893,26 +3019,38 @@ require([
             }
 
             function fallbackRestUpdate() {
-                // Try multiple endpoint formats with different owner contexts
-                var contexts = [
-                    { owner: owner, app: app },
-                    { owner: 'nobody', app: app },
-                    { owner: '-', app: app }
-                ];
+                // First, find the search with wildcard context to get the real owner/app
+                var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
+                var localePrefix = locale ? '/' + locale[1] : '';
+                var findEndpoint = localePrefix + '/splunkd/__raw/servicesNS/-/-/saved/searches/' + encodeURIComponent(searchName) + '?output_mode=json';
 
-                function tryContext(ctxIndex) {
-                    if (ctxIndex >= contexts.length) {
-                        alert("Failed to update schedule. Please update manually in Settings > Searches, Reports, and Alerts.");
-                        return;
+                console.log("Finding search at:", findEndpoint);
+
+                $.ajax({
+                    url: findEndpoint,
+                    type: 'GET',
+                    success: function(response) {
+                        // Extract actual owner and app from the response
+                        var entry = response.entry && response.entry[0];
+                        if (entry && entry.acl) {
+                            var realOwner = entry.acl.owner || owner;
+                            var realApp = entry.acl.app || app;
+                            console.log("Found search - owner:", realOwner, "app:", realApp);
+                            updateWithContext(realOwner, realApp);
+                        } else {
+                            console.log("Search found but no ACL info, trying contexts...");
+                            tryContexts(0);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("Search not found with wildcard, trying specific contexts...");
+                        tryContexts(0);
                     }
+                });
 
-                    var ctx = contexts[ctxIndex];
-                    // Try both endpoint formats
-                    var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
-                    var localePrefix = locale ? '/' + locale[1] : '';
-                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(searchName);
-
-                    console.log("Trying REST endpoint:", endpoint, "context:", ctx);
+                function updateWithContext(ctxOwner, ctxApp) {
+                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctxOwner) + '/' + encodeURIComponent(ctxApp) + '/saved/searches/' + encodeURIComponent(searchName);
+                    console.log("Updating at:", endpoint);
 
                     $.ajax({
                         url: endpoint,
@@ -2926,14 +3064,48 @@ require([
                             onUpdateSuccess();
                         },
                         error: function(xhr, status, error) {
-                            console.error("REST update failed:", xhr.status, xhr.responseText, "trying next context...");
-                            // Try next context
-                            tryContext(ctxIndex + 1);
+                            console.error("REST update failed at", ctxOwner + "/" + ctxApp, ":", xhr.status, xhr.responseText);
+                            // Fall back to context tries
+                            tryContexts(0);
                         }
                     });
                 }
 
-                tryContext(0);
+                // Try multiple contexts as fallback
+                var contexts = [
+                    { owner: owner, app: app },
+                    { owner: 'nobody', app: app },
+                    { owner: 'admin', app: app }
+                ];
+
+                function tryContexts(ctxIndex) {
+                    if (ctxIndex >= contexts.length) {
+                        alert("Failed to update schedule. Please update manually in Settings > Searches, Reports, and Alerts.");
+                        return;
+                    }
+
+                    var ctx = contexts[ctxIndex];
+                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(searchName);
+
+                    console.log("Trying context:", ctx.owner + "/" + ctx.app);
+
+                    $.ajax({
+                        url: endpoint,
+                        type: 'POST',
+                        data: {
+                            cron_schedule: newCron,
+                            output_mode: 'json'
+                        },
+                        success: function(response) {
+                            console.log("Cron schedule updated successfully via REST:", response);
+                            onUpdateSuccess();
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Context failed:", xhr.status);
+                            tryContexts(ctxIndex + 1);
+                        }
+                    });
+                }
             }
 
             function onUpdateSuccess() {
@@ -3121,6 +3293,124 @@ require([
             return 'Runs on weekdays at ' + hour + ':' + (minute === '0' ? '00' : minute);
         }
         return 'Custom schedule';
+    }
+
+    // Get recommended solutions based on the suspicious reason
+    function getReasonSolutions(reason) {
+        var solutions = [];
+        var lowerReason = (reason || '').toLowerCase();
+
+        if (lowerReason.indexOf('high runtime') > -1 || lowerReason.indexOf('runtime ratio') > -1 || lowerReason.indexOf('excessive runtime') > -1) {
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Optimize the search query:</strong> Use more specific index filters (e.g., <code>index=specific_index</code>) instead of wildcards</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Reduce time range:</strong> Narrow the <code>earliest_time</code> and <code>latest_time</code> parameters</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Add field extraction efficiency:</strong> Use <code>tstats</code> or summary indexes for high-volume searches</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Run less frequently:</strong> Consider changing from every 5 min to hourly or daily</li>');
+        } else if (lowerReason.indexOf('frequent') > -1 || lowerReason.indexOf('runs every') > -1 || lowerReason.indexOf('schedule') > -1) {
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Reduce frequency:</strong> Change from every minute/5 minutes to every 15 minutes or hourly</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Use data model acceleration:</strong> Pre-summarize data to reduce query time</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Batch processing:</strong> Run during off-peak hours if real-time data is not required</li>');
+        } else if (lowerReason.indexOf('wildcard') > -1 || lowerReason.indexOf('all index') > -1 || lowerReason.indexOf('index=*') > -1) {
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Specify indexes:</strong> Replace <code>index=*</code> with specific indexes like <code>index=main OR index=security</code></li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Use search-time field extraction:</strong> Filter early with <code>| fields</code> to reduce data processed</li>');
+        } else if (lowerReason.indexOf('expensive') > -1 || lowerReason.indexOf('cost') > -1 || lowerReason.indexOf('resource') > -1) {
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Review search complexity:</strong> Simplify joins, subsearches, and stats commands</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Consider acceleration:</strong> Enable report acceleration if this is a frequently-run report</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Archive or disable:</strong> If no longer needed, disable or delete the search</li>');
+        } else if (lowerReason.indexOf('owner') > -1 || lowerReason.indexOf('orphan') > -1 || lowerReason.indexOf('unknown') > -1) {
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Reassign ownership:</strong> Transfer search to an active user or service account</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Review necessity:</strong> Determine if the search is still needed</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Document purpose:</strong> Add a description explaining the search\'s business value</li>');
+        } else {
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Review search requirements:</strong> Confirm this search is still needed for business operations</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Optimize schedule:</strong> Consider running during off-peak hours</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Add documentation:</strong> Update the search description with its purpose and owner contact</li>');
+            solutions.push('<li style="margin-bottom: 8px;"><strong>Flag for review:</strong> Mark as reviewed if the search is operating as expected</li>');
+        }
+
+        return '<ul style="margin: 0; padding-left: 20px; color: #2ecc71;">' + solutions.join('') + '</ul>';
+    }
+
+    // Open the reason details modal
+    function showReasonModal(searchName, reason) {
+        currentReasonSearch = { name: searchName, reason: reason };
+
+        $('#reasonSearchName').text(searchName || 'Unknown');
+
+        if (reason && reason.trim()) {
+            $('#reasonDescription').html('<p style="margin: 0;">' + escapeHtml(reason) + '</p>');
+        } else {
+            $('#reasonDescription').html('<p style="margin: 0; color: rgba(255,255,255,0.6);">No specific reason recorded. This search may have been flagged manually or detected as suspicious by an automated rule.</p>');
+        }
+
+        $('#reasonSolutions').html(getReasonSolutions(reason));
+
+        $('#reasonModalOverlay').addClass('active');
+    }
+
+    // Show search query preview modal - fetches the actual search SPL from REST API
+    function showSearchPreviewModal(searchName, owner, app) {
+        currentSearchPreview = { name: searchName, owner: owner, app: app, query: '' };
+
+        $('#searchPreviewName').text(searchName || 'Unknown');
+        $('#searchPreviewOwner').text(owner || '-');
+        $('#searchPreviewApp').text(app || '-');
+        $('#searchPreviewQuery').html('<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Loading search query...</div>');
+
+        $('#searchPreviewModalOverlay').addClass('active');
+
+        // Fetch the search query from REST API
+        var localePrefix = '';
+        var pathParts = window.location.pathname.split('/');
+        if (pathParts.length > 1 && pathParts[1].match(/^[a-z]{2}(-[A-Z]{2})?$/)) {
+            localePrefix = '/' + pathParts[1];
+        }
+
+        var endpoint = localePrefix + '/splunkd/__raw/servicesNS/-/-/saved/searches/' + encodeURIComponent(searchName) + '?output_mode=json';
+
+        $.ajax({
+            url: endpoint,
+            type: 'GET',
+            success: function(response) {
+                if (response && response.entry && response.entry.length > 0) {
+                    var entry = response.entry[0];
+                    var searchQuery = entry.content && entry.content.search ? entry.content.search : 'No search query found';
+
+                    currentSearchPreview.query = searchQuery;
+
+                    // Format the query with syntax highlighting
+                    var formattedQuery = formatSplunkQuery(searchQuery);
+                    $('#searchPreviewQuery').html(formattedQuery);
+                } else {
+                    $('#searchPreviewQuery').html('<div style="color: #dc4e41;">Unable to load search query</div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error fetching search:', error);
+                $('#searchPreviewQuery').html('<div style="color: #dc4e41;">Error loading search: ' + escapeHtml(error) + '</div>');
+            }
+        });
+    }
+
+    // Format SPL query with basic syntax highlighting
+    function formatSplunkQuery(query) {
+        if (!query) return '';
+
+        // Escape HTML first
+        var escaped = escapeHtml(query);
+
+        // Highlight Splunk commands (starts with |)
+        escaped = escaped.replace(/\|\s*(\w+)/g, '<span style="color: #00d4ff;">| $1</span>');
+
+        // Highlight field=value pairs
+        escaped = escaped.replace(/(\w+)=/g, '<span style="color: #f8be34;">$1</span>=');
+
+        // Highlight quoted strings
+        escaped = escaped.replace(/"([^"]+)"/g, '<span style="color: #53a051;">"$1"</span>');
+
+        // Highlight numbers
+        escaped = escaped.replace(/\b(\d+)\b/g, '<span style="color: #ff7b72;">$1</span>');
+
+        return escaped;
     }
 
     function openCronModal(searchName, cronSchedule, owner, app) {
@@ -3361,8 +3651,8 @@ require([
 
         $('#metricPopupValue').text(value);
         $('#metricPopupTitle').text(title);
-        $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Dashboard</th><th>Owner</th><th>App</th><th>Sharing</th><th>Size (KB)</th></tr>');
-        $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        $('#metricPopupTableHead').html('<tr><th>Dashboard</th><th>Owner</th><th>App</th><th>Sharing</th><th>Size (KB)</th></tr>');
+        $('#metricPopupTableBody').html('<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
         $('#metricPopupOverlay').addClass('active');
 
         // Store current dashboard type
@@ -3444,7 +3734,6 @@ require([
                         var sizeColor = parseFloat(sizeKb) > 25 ? '#dc4e41' : (parseFloat(sizeKb) > 10 ? '#f8be34' : '#53a051');
 
                         html += '<tr class="metric-popup-row" data-index="' + i + '" data-dashboard-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
-                            '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
                             '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
                             '<td style="padding: 8px;">' + escapeHtml(owner) + '</td>' +
                             '<td style="padding: 8px;">' + escapeHtml(app) + '</td>' +
@@ -3495,11 +3784,11 @@ require([
         $('#metricPopupTitle').text(title);
         // Add "Time Remaining" column for flagged/expiring metrics
         if (metricType === 'flagged' || metricType === 'expiring') {
-            $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
-            $('#metricPopupTableBody').html('<tr><td colspan="7" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
-        } else {
-            $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
             $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        } else {
+            $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableBody').html('<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
         }
         $('#metricPopupOverlay').addClass('active');
 
@@ -3588,7 +3877,7 @@ require([
                             '</div>';
 
                         html += '<tr class="metric-popup-row" data-index="' + i + '" data-search-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
-                            '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
+                            '<td style="padding: 8px; width: 40px; text-align: center; color: rgba(255,255,255,0.4); font-size: 11px;">' + (i + 1) + '</td>' +
                             '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
                             '<td style="padding: 8px;" class="status-cell">' + clickableStatus + '</td>';
 
@@ -3711,8 +4000,8 @@ require([
             var isActivityPanel = panelTitle.indexOf('Activity') > -1 || panelTitle.indexOf('Audit') > -1 || panelTitle.indexOf('History') > -1;
             var isConfigTable = $table.attr('id') === 'cost_config_table' || panelTitle.indexOf('Current Cost Configuration') > -1 || panelTitle.indexOf('Configuration') > -1;
 
-            // Skip checkbox enhancement for cost-only panels, activity/audit log panels, and config tables
-            var skipCheckboxes = isCostPanel || isActivityPanel || isConfigTable;
+            // Skip checkbox enhancement - using status dropdown for all status changes instead
+            var skipCheckboxes = true;
 
             var scheduleColIndex = -1;
             var searchNameColIndex = -1;
@@ -3902,10 +4191,26 @@ require([
                     }
 
                     if ($searchNameCell.length && !$searchNameCell.find('.suspicious-indicator').length) {
-                        var suspiciousHtml = '<span class="suspicious-indicator" style="color: #17a2b8; margin-right: 6px; font-size: 12px;" title="Suspicious search pattern detected">⚡</span>';
+                        var suspiciousHtml = '<span class="suspicious-indicator" style="color: #f8be34; margin-right: 6px; font-size: 12px;" title="Suspicious search pattern detected">⚡</span>';
                         $searchNameCell.prepend(suspiciousHtml);
                     }
                     $row.addClass('row-suspicious');
+                }
+
+                // Add magnifying glass icon to view search query (on the right side of search name)
+                if (searchNameColIndex >= 0 && $cells.length > searchNameColIndex && searchName) {
+                    var $searchNameCell = $cells.eq(searchNameColIndex);
+
+                    // Only add if not already present
+                    if (!$searchNameCell.find('.search-preview-icon').length) {
+                        var previewHtml = '<span class="search-preview-icon" ' +
+                            'data-search="' + escapeHtml(searchName) + '" ' +
+                            'data-owner="' + escapeHtml(owner) + '" ' +
+                            'data-app="' + escapeHtml(app) + '" ' +
+                            'style="color: #00d4ff; margin-left: 8px; font-size: 12px; cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" ' +
+                            'title="View search query">🔍</span>';
+                        $searchNameCell.append(previewHtml);
+                    }
                 }
 
                 // Make status column interactive with dropdown (like modal)
@@ -3939,6 +4244,26 @@ require([
                     // If cron-clickable is missing but should exist, re-add it
                     if (!$scheduleCell.find('.cron-clickable').length && cronValue.match(/^[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+$/)) {
                         $scheduleCell.html('<span class="cron-clickable" data-cron="' + escapeHtml(cronValue) + '" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" data-app="' + escapeHtml(app) + '">' + escapeHtml(cronValue) + '</span>');
+                    }
+                }
+
+                // Enhance Reason column to be clickable for showing details modal
+                if (reasonColIndex >= 0 && $cells.length > reasonColIndex) {
+                    var $reasonCell = $cells.eq(reasonColIndex);
+                    var reasonValue = $reasonCell.text().trim();
+
+                    // Only enhance if there's a reason and not already enhanced
+                    if (reasonValue && !$reasonCell.find('.reason-clickable').length) {
+                        var truncatedReason = reasonValue.length > 40 ? reasonValue.substring(0, 40) + '...' : reasonValue;
+                        var reasonHtml = '<span class="reason-clickable" ' +
+                            'data-search="' + escapeHtml(searchName) + '" ' +
+                            'data-reason="' + escapeHtml(reasonValue) + '" ' +
+                            'style="cursor: pointer; color: #f8be34; text-decoration: underline; text-decoration-style: dotted;" ' +
+                            'title="Click to view details and solutions">' +
+                            escapeHtml(truncatedReason) +
+                            '<span style="margin-left: 4px; font-size: 10px;">ℹ️</span>' +
+                            '</span>';
+                        $reasonCell.html(reasonHtml);
                     }
                 }
             });
@@ -4093,10 +4418,36 @@ require([
         openFlaggedModal();
     });
 
+    // Click handler for search preview icon - opens search query modal
+    $(document).on('click', '.search-preview-icon', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var $el = $(this);
+        var searchName = $el.attr('data-search') || $el.data('search');
+        var owner = $el.attr('data-owner') || $el.data('owner');
+        var app = $el.attr('data-app') || $el.data('app');
+
+        console.log("Search preview clicked:", searchName);
+        showSearchPreviewModal(searchName, owner, app);
+
+        return false;
+    });
+
+    // Hover effect for search preview icon
+    $(document).on('mouseenter', '.search-preview-icon', function() {
+        $(this).css('opacity', '1');
+    });
+
+    $(document).on('mouseleave', '.search-preview-icon', function() {
+        $(this).css('opacity', '0.7');
+    });
+
     // Row click for selection (not on checkbox, cron, or flag)
     $(document).on('click', '.gov-enhanced td:not(.gov-checkbox-cell)', function(e) {
         // Don't handle if clicking on interactive elements
-        if ($(e.target).is('input, .cron-clickable, .flag-indicator')) {
+        if ($(e.target).is('input, .cron-clickable, .flag-indicator, .search-preview-icon')) {
             return;
         }
 
@@ -4127,6 +4478,22 @@ require([
         var total = $table.find('.gov-checkbox').length;
         var checked = $table.find('.gov-checkbox:checked').length;
         $table.find('.gov-select-all').prop('checked', total === checked);
+    });
+
+    // Click handler for reason column - opens reason details modal
+    $(document).on('click', '.reason-clickable', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var $el = $(this);
+        var searchName = $el.attr('data-search') || $el.data('search');
+        var reason = $el.attr('data-reason') || $el.data('reason');
+
+        console.log("Reason clicked:", searchName, reason);
+        showReasonModal(searchName, reason);
+
+        return false;
     });
 
     // Click handler for cron - use event delegation with high priority

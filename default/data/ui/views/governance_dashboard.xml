@@ -187,13 +187,16 @@
 | search app=$filter_app$ owner=$filter_owner$
 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status, remediation_deadline, flagged_by, flagged_time, reason as flag_reason
 | eval governance_status = case(
+    disabled=1, "Disabled",
     flag_status="disabled", "Disabled by Governance",
     flag_status="notified", "Pending Remediation",
     flag_status="pending", "Flagged",
-    is_suspicious=1, "Suspicious",
+    flag_status="review", "Pending Review",
+    flag_status="resolved", "OK",
+    is_suspicious=1 AND (isnull(flag_status) OR flag_status=""), "Suspicious",
     1=1, "OK")
-| eval days_remaining = if(isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), null())
 | eval is_flagged_search = if(flag_status="pending" OR flag_status="notified" OR flag_status="disabled", 1, 0)
+| eval days_remaining = if(is_flagged_search=1 AND isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), null())
 | eval is_expiring_soon = if(isnotnull(days_remaining) AND days_remaining >= 0 AND days_remaining &lt;= 3, 1, 0)
 | eval is_suspicious_unflagged = if(is_suspicious=1 AND (isnull(flag_status) OR flag_status=""), 1, 0)
 | eval view_match = case(
@@ -206,17 +209,22 @@
     "$view_filter$"="flagged", 1,
     "$view_filter$"="expiring", 1,
     "$filter_status$"="*", 1,
-    disabled=$filter_status$, 1,
+    "$filter_status$"="0" AND disabled=0, 1,
+    "$filter_status$"="1" AND disabled=1, 1,
     1=1, 0)
 | where status_filter_match=1
 | eval flagged_date = if(isnotnull(flagged_time), strftime(flagged_time, "%Y-%m-%d"), "")
 | eval deadline_date = if(isnotnull(remediation_deadline), strftime(remediation_deadline, "%Y-%m-%d"), "")
 | eval sort_priority = case(
-    is_expiring_soon=1, 1,
-    is_flagged_search=1, 2,
-    is_suspicious=1, 3,
-    1=1, 4)
-| sort sort_priority, days_remaining, - runtime_ratio
+    governance_status="Suspicious", 1,
+    governance_status="Flagged", 2,
+    governance_status="Pending Remediation", 3,
+    governance_status="Pending Review", 4,
+    governance_status="OK", 5,
+    governance_status="Disabled", 6,
+    governance_status="Disabled by Governance", 7,
+    1=1, 8)
+| sort sort_priority, - runtime_ratio
 | eval display_name = title
 | eval display_reason = coalesce(flag_reason, suspicious_reason, "")
 | table display_name, governance_status, owner, app, cron_schedule, frequency_label, avg_runtime_display, run_count, runtime_ratio, svc_per_run, monthly_cost, days_remaining, flagged_by, display_reason
@@ -230,7 +238,7 @@
         <option name="rowNumbers">true</option>
         <option name="wrap">false</option>
         <format type="color" field="Status">
-          <colorPalette type="map">{"OK":#53A051,"Suspicious":#F8BE34,"Flagged":#F1813F,"Pending Remediation":#DC4E41,"Disabled by Governance":#708794,"Enabled":#2EA043}</colorPalette>
+          <colorPalette type="map">{"OK":#53A051,"Suspicious":#F8BE34,"Flagged":#F1813F,"Pending Remediation":#DC4E41,"Pending Review":#6F42C1,"Disabled by Governance":#708794,"Disabled":#708794,"Enabled":#2EA043}</colorPalette>
         </format>
         <format type="color" field="Runtime %">
           <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
@@ -247,10 +255,7 @@
       </table>
       <html>
         <div class="action-buttons" id="all-searches-actions">
-          <button class="btn btn-primary" id="flag-btn-2">Flag Selected</button>
-          <button class="btn" id="unflag-btn-2">Unflag Selected</button>
-          <button class="btn btn-warning" id="disable-expiring-btn">Disable Expiring Soon</button>
-          <button class="btn" id="email-btn-2">Email Owner</button>
+          <p style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 8px;">💡 Use the Status dropdown (▼) in each row to flag, unflag, or change status. Click 🔍 to view search query.</p>
         </div>
       </html>
     </panel>
