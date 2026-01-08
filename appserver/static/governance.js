@@ -709,9 +709,9 @@ require([
         var now = Math.floor(Date.now() / 1000);
         var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
 
-        // Build a union of makeresults for each search
-        var unionParts = searches.map(function(s, idx) {
-            return '| makeresults ' +
+        // Build append parts - each entry in its own subsearch to properly union results
+        var appendParts = searches.map(function(s, idx) {
+            return '| append [| makeresults ' +
                 '| eval search_name="' + escapeString(s.searchName) + '"' +
                 ', search_owner="' + escapeString(s.owner) + '"' +
                 ', search_app="' + escapeString(s.app) + '"' +
@@ -722,17 +722,17 @@ require([
                 ', remediation_deadline=' + deadline +
                 ', status="pending"' +
                 ', reason="' + escapeString(s.reason || 'Manually flagged by administrator') + '"' +
-                ', notes=""';
+                ', notes=""]';
         });
 
         // Build list of search names for exclusion
         var searchNamesList = searches.map(function(s) { return '"' + escapeString(s.searchName) + '"'; }).join(', ');
 
-        // First read existing entries (excluding ones we're flagging), then union with new entries
+        // First read existing entries (excluding ones we're flagging), then append all new entries
         var searchQuery = '| inputlookup flagged_searches_lookup ' +
             '| search NOT search_name IN (' + searchNamesList + ') ' +
-            '| append [' + unionParts.join(' ') +
-            '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes]' +
+            appendParts.join(' ') +
+            '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes ' +
             '| outputlookup flagged_searches_lookup';
 
         console.log("Batch flag query for " + searches.length + " searches");
@@ -1829,76 +1829,89 @@ require([
 
             console.log('Flagging searches from metric popup:', selectedSearches);
 
-            // Close metric popup and use existing flag functionality
+            // Close metric popup
             $('#metricPopupOverlay').removeClass('active');
 
-            // Flag each selected search
-            var flagCount = 0;
-            var errorCount = 0;
             var reason = "Flagged from Suspicious Searches panel - potentially inefficient or wasteful search patterns detected";
-            var remediationDays = 7;
-            var remediationDeadline = Math.floor(Date.now() / 1000) + (remediationDays * 86400);
+            var remediationDays = CONFIG.remediationDays || 7;
+            var now = Math.floor(Date.now() / 1000);
+            var remediationDeadline = now + (remediationDays * 86400);
 
-            // Store the flagged searches for potential extend deadline
-            var flaggedSearchesForExtend = [];
+            showToast('Flagging ' + selectedSearches.length + ' search(es)...');
 
-            selectedSearches.forEach(function(search) {
-                var searchQuery = '| inputlookup flagged_searches_lookup ' +
-                    '| append [| makeresults | eval search_name="' + escapeString(search.name) + '", ' +
-                    'search_owner="' + escapeString(search.owner || 'unknown') + '", ' +
-                    'search_app="' + escapeString(search.app || 'unknown') + '", ' +
-                    'reason="' + escapeString(reason) + '", ' +
-                    'status="pending", ' +
-                    'flagged_time=' + Math.floor(Date.now() / 1000) + ', ' +
-                    'remediation_deadline=' + remediationDeadline + ' | fields - _time] ' +
-                    '| dedup search_name ' +
-                    '| outputlookup flagged_searches_lookup';
+            // Build SINGLE batch query to flag all searches at once (prevents race conditions)
+            // Each entry must be in its own append subsearch to union the results
+            var appendParts = selectedSearches.map(function(search) {
+                return '| append [| makeresults ' +
+                    '| eval search_name="' + escapeString(search.name) + '"' +
+                    ', search_owner="' + escapeString(search.owner || 'unknown') + '"' +
+                    ', search_app="' + escapeString(search.app || 'unknown') + '"' +
+                    ', flagged_by="' + escapeString(currentUser) + '"' +
+                    ', flagged_time=' + now +
+                    ', notification_sent=0' +
+                    ', notification_time=0' +
+                    ', remediation_deadline=' + remediationDeadline +
+                    ', status="pending"' +
+                    ', reason="' + escapeString(reason) + '"' +
+                    ', notes=""]';
+            });
 
-                runSearch(searchQuery, function(err, results) {
-                    flagCount++;
-                    if (err) {
-                        console.error('Error flagging search:', search.name, err);
-                        errorCount++;
-                    } else {
-                        logAction('flagged', search.name, reason);
-                        // Add to list for potential extend
-                        flaggedSearchesForExtend.push({
-                            searchName: search.name,
-                            owner: search.owner,
-                            app: search.app,
-                            status: 'pending',
-                            deadlineEpoch: remediationDeadline,
-                            daysRemaining: remediationDays
-                        });
-                    }
+            // Build list of search names to exclude existing entries (prevents duplicates)
+            var searchNamesList = selectedSearches.map(function(s) {
+                return '"' + escapeString(s.name) + '"';
+            }).join(', ');
 
-                    // Show success message when all done
-                    if (flagCount === selectedSearches.length) {
-                        var successCount = flagCount - errorCount;
-                        showToast('✓ Flagged ' + successCount + ' search(es) for governance review');
-                        refreshDashboard();
+            // Single query: read existing (excluding these searches) + append all new entries
+            var batchQuery = '| inputlookup flagged_searches_lookup ' +
+                '| search NOT search_name IN (' + searchNamesList + ') ' +
+                appendParts.join(' ') +
+                '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes ' +
+                '| outputlookup flagged_searches_lookup';
 
-                        // Offer to extend deadline or view in flagged modal
-                        if (successCount > 0) {
-                            setTimeout(function() {
-                                var action = confirm(
-                                    'Successfully flagged ' + successCount + ' search(es) with a ' + remediationDays + '-day deadline.\n\n' +
-                                    'Would you like to adjust the deadline now?\n\n' +
-                                    'Click OK to open the Extend Deadline modal.\n' +
-                                    'Click Cancel to view in the Flagged modal.'
-                                );
+            console.log('Batch flagging ' + selectedSearches.length + ' searches in single query');
 
-                                if (action) {
-                                    // Open extend modal with the just-flagged searches
-                                    openExtendModal(flaggedSearchesForExtend);
-                                } else {
-                                    // Open flagged modal to see the searches
-                                    openMetricPopup('flagged', successCount, 'Currently Flagged');
-                                }
-                            }, 500);
-                        }
-                    }
+            runSearch(batchQuery, function(err, results) {
+                if (err) {
+                    console.error('Error batch flagging searches:', err);
+                    showToast('Error flagging searches');
+                    return;
+                }
+
+                // Log each action
+                selectedSearches.forEach(function(search) {
+                    logAction('flagged', search.name, reason);
                 });
+
+                showToast('✓ Flagged ' + selectedSearches.length + ' search(es) for governance review');
+                refreshDashboard();
+
+                // Build list for extend modal
+                var flaggedSearchesForExtend = selectedSearches.map(function(search) {
+                    return {
+                        searchName: search.name,
+                        owner: search.owner,
+                        app: search.app,
+                        status: 'pending',
+                        deadlineEpoch: remediationDeadline,
+                        daysRemaining: remediationDays
+                    };
+                });
+
+                // Offer to extend deadline or view in flagged modal
+                setTimeout(function() {
+                    var action = confirm(
+                        'Successfully flagged ' + selectedSearches.length + ' search(es) with a ' + remediationDays + '-day deadline.\n\n' +
+                        'Would you like to adjust the deadline now?\n\n' +
+                        'Click OK to open the Extend Deadline modal.\n' +
+                        'Click Cancel to view in the Flagged modal.'
+                    );
+
+                    if (action) {
+                        openExtendModal(flaggedSearchesForExtend);
+                    } else {
+                        openMetricPopup('flagged', selectedSearches.length, 'Currently Flagged');
+                    }
+                }, 500);
             });
         });
 
@@ -3778,7 +3791,7 @@ require([
                     // Find the cell containing the search name by matching content (more reliable than index)
                     // Use same emoji regex as line 3318 to match all possible status icons
                     var $searchNameCell = $cells.filter(function() {
-                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓⚡]+/, '').trim();
+                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓⚡🔴]+/, '').trim();
                         return cellText === searchName;
                     }).first();
 
@@ -3791,6 +3804,30 @@ require([
                         var flagHtml = '<span class="flag-indicator" style="color: #dc4e41; margin-right: 6px; font-size: 12px;" title="Flagged for review">🚩</span>';
                         $searchNameCell.prepend(flagHtml);
                     }
+                }
+
+                // Add disabled indicator next to search name if search is disabled
+                var isDisabled = false;
+                if (statusColIndex >= 0 && $cells.length > statusColIndex) {
+                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
+                    isDisabled = (statusText === 'disabled' || statusText.indexOf('disabled') > -1);
+                }
+
+                if (isDisabled && searchName) {
+                    var $searchNameCell = $cells.filter(function() {
+                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓⚡🔴]+/, '').trim();
+                        return cellText === searchName;
+                    }).first();
+
+                    if (!$searchNameCell.length && searchNameColIndex >= 0) {
+                        $searchNameCell = $cells.eq(searchNameColIndex);
+                    }
+
+                    if ($searchNameCell.length && !$searchNameCell.find('.disabled-indicator').length) {
+                        var disabledHtml = '<span class="disabled-indicator" style="color: #708794; margin-right: 6px; font-size: 12px;" title="Search is disabled">🔴</span>';
+                        $searchNameCell.prepend(disabledHtml);
+                    }
+                    $row.addClass('row-disabled');
                 }
 
                 // Enhance schedule column with cron clickable
