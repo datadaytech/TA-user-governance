@@ -25,6 +25,71 @@ require([
         remediationDays: 7
     };
 
+    // Funny encouraging messages for when there are 0 items (rotates on each click)
+    var zeroItemMessages = [
+        "Zero problems? You're basically a search governance superhero. 🦸",
+        "Nothing to see here. Your searches are so clean they squeak.",
+        "Wow, 0 items. Did you bribe the search scheduler?",
+        "All clear! Your Splunk instance just gave you a standing ovation. 👏",
+        "Empty list = happy admin. This is the way.",
+        "No issues found. Go grab a coffee, you've earned it. ☕",
+        "Look at you, running a tight ship! Captain Governance over here.",
+        "Zero flags. Either you're great at this or the searches are hiding. 👀",
+        "Nothing here but tumbleweeds and excellence. 🌵",
+        "Congrats! Your searches are more organized than my sock drawer.",
+        "Achievement unlocked: Perfect Governance! Now go home early.",
+        "No problematic searches? Are you even using Splunk? 😏",
+        "This is cleaner than my production code. Impressive.",
+        "0 items. The auditors will be disappointed they can't yell at anyone.",
+        "Your governance game is stronger than my coffee. And I like strong coffee.",
+        "Nothing to flag means nothing to drag. Well done!",
+        "Zero issues. You're making the rest of us look bad. Stop it. 😤",
+        "All clear! The search police have left the building.",
+        "No items found. Did you just flex on the entire SOC team?",
+        "Your searches are so well-behaved they deserve a treat. 🍪",
+        "Absolutely nothing wrong. Are you a wizard? 🧙‍♂️",
+        "Zero problems detected. The universe is in balance.",
+        "Empty list. Time to update your resume with 'Governance Master'.",
+        "Nothing here! Your future self thanks your past self.",
+        "Clean slate! This is what peak performance looks like.",
+        "No flags, no worries. Living the admin dream!",
+        "Zero items. You've achieved what others only dream of.",
+        "This list is emptier than my bank account after Black Friday. 👌",
+        "Flawless execution. Someone give this person a raise!",
+        "Nothing to report. Go touch some grass, you've earned it. 🌿",
+        "0 issues. The compliance team just shed a tear of joy.",
+        "All systems nominal. Houston, we DON'T have a problem.",
+        "No items? Check again. Just kidding, you're actually perfect.",
+        "Your governance is tighter than my deadline schedules. Respect.",
+        "Empty. Clean. Beautiful. Just like my code after review. Just kidding.",
+        "Zero flags means zero drama. That's a W in my book. 📚",
+        "Nothing to see here, folks. Move along to the coffee machine.",
+        "You've got fewer problems than a hello world program.",
+        "This is so clean I could eat off it. But I won't. That's weird.",
+        "No items found. Did you sacrifice a goat to the search gods?",
+        "Your Splunk hygiene is immaculate. Someone's been flossing!",
+        "Zero issues. You're the Marie Kondo of scheduled searches.",
+        "Nothing problematic here. What's your secret? Asking for a friend.",
+        "All clear! Time to add 'Search Whisperer' to your LinkedIn.",
+        "No items. The only thing flagged here is your awesomeness. 🚩✨",
+        "Empty list energy. I respect it.",
+        "Zero findings. The pen testers are jealous.",
+        "Your governance is chef's kiss. 👨‍🍳💋",
+        "Nothing here but clean data and good vibes.",
+        "0 items. Somewhere, a compliance officer is smiling."
+    ];
+    var lastZeroMessageIndex = -1;
+
+    // Get a random encouraging message (never repeats consecutively)
+    function getZeroItemMessage() {
+        var newIndex;
+        do {
+            newIndex = Math.floor(Math.random() * zeroItemMessages.length);
+        } while (newIndex === lastZeroMessageIndex && zeroItemMessages.length > 1);
+        lastZeroMessageIndex = newIndex;
+        return zeroItemMessages[newIndex];
+    }
+
     // Get current user
     var currentUser = "admin";
     try {
@@ -79,6 +144,40 @@ require([
             .replace(/'/g, '&#39;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+    }
+
+    // Fetch last governance action via REST API (fallback)
+    function fetchLastGovernanceAction() {
+        var localePrefix = '';
+        var pathParts = window.location.pathname.split('/');
+        if (pathParts.length > 1 && pathParts[1].match(/^[a-z]{2}(-[A-Z]{2})?$/)) {
+            localePrefix = '/' + pathParts[1];
+        }
+
+        $.ajax({
+            url: localePrefix + '/splunkd/__raw/services/search/jobs',
+            type: 'POST',
+            data: {
+                search: '| inputlookup governance_audit_log.csv | sort - timestamp | head 1 | eval display = strftime(timestamp, "%Y-%m-%d %H:%M:%S") . " - " . action . " by " . performed_by | table display',
+                exec_mode: 'oneshot',
+                output_mode: 'json'
+            },
+            success: function(response) {
+                if (response && response.results && response.results.length > 0) {
+                    var display = response.results[0].display;
+                    if (display) {
+                        $('#lastActionTimestamp').text(display);
+                    } else {
+                        $('#lastActionTimestamp').text('No actions recorded');
+                    }
+                } else {
+                    $('#lastActionTimestamp').text('No actions recorded');
+                }
+            },
+            error: function() {
+                $('#lastActionTimestamp').text('No actions recorded');
+            }
+        });
     }
 
     // Format countdown timer display from deadline epoch
@@ -365,12 +464,12 @@ require([
         };
 
         // Determine which badges to show
-        if (statusLower === 'disabled') {
+        if (statusLower === 'disabled' || statusLower === 'disabled by governance') {
             badges.push('<span class="status-badge disabled" style="' + badgeStyles.disabled + '">DISABLED</span>');
         } else if (statusLower === 'pending' || statusLower === 'flagged') {
             badges.push('<span class="status-badge flagged" style="' + badgeStyles.pending + '">FLAGGED</span>');
-        } else if (statusLower === 'notified') {
-            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">NOTIFIED</span>');
+        } else if (statusLower === 'notified' || statusLower === 'pending remediation') {
+            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">PENDING</span>');
         } else if (statusLower === 'enabled') {
             badges.push('<span class="status-badge enabled" style="' + badgeStyles.enabled + '">ENABLED</span>');
         } else if (statusLower === 'expiring') {
@@ -379,8 +478,10 @@ require([
             badges.push('<span class="status-badge suspicious" style="' + badgeStyles.suspicious + '">SUSPICIOUS</span>');
         } else if (statusLower === 'active') {
             badges.push('<span class="status-badge active" style="' + badgeStyles.active + '">ACTIVE</span>');
-        } else if (statusLower === 'review') {
+        } else if (statusLower === 'review' || statusLower === 'pending review') {
             badges.push('<span class="status-badge review" style="' + badgeStyles.review + '">📋 PENDING REVIEW</span>');
+        } else if (statusLower === 'ok' || statusLower === 'resolved') {
+            badges.push('<span class="status-badge ok" style="background: #2ecc71; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">OK</span>');
         } else {
             badges.push('<span class="status-badge" style="background: #666; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px;">' + escapeHtml(status || '-') + '</span>');
         }
@@ -1595,12 +1696,84 @@ require([
             '</div>' +
         '</div>';
 
+    // Reason Details Modal - shows why a search was flagged and solutions
+    var reasonModalHtml =
+        '<div class="cron-modal-overlay" id="reasonModalOverlay">' +
+            '<div class="cron-modal" style="max-width: 600px;">' +
+                '<div class="cron-modal-header" style="background: linear-gradient(135deg, rgba(248, 190, 52, 0.2) 0%, rgba(241, 129, 63, 0.1) 100%); border-bottom: 2px solid #f8be34;">' +
+                    '<h2 style="color: #fff; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-size: 22px;">⚡</span>Suspicious Search</h2>' +
+                    '<button class="cron-modal-close" id="reasonModalClose">&times;</button>' +
+                '</div>' +
+                '<div class="cron-modal-body" style="padding: 24px;">' +
+                    '<div id="reasonModalContent">' +
+                        '<div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">' +
+                            '<div style="color: #00d4ff; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Search Name</div>' +
+                            '<div id="reasonSearchName" style="color: #fff; font-size: 15px; font-weight: 500; word-break: break-word;"></div>' +
+                        '</div>' +
+                        '<div style="background: linear-gradient(135deg, rgba(248, 190, 52, 0.15) 0%, rgba(248, 190, 52, 0.05) 100%); border-left: 4px solid #f8be34; border-radius: 0 8px 8px 0; padding: 16px; margin-bottom: 20px;">' +
+                            '<div style="color: #f8be34; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;"><span>⚠</span> Issue Detected</div>' +
+                            '<div id="reasonDescription" style="color: #fff; font-size: 14px; line-height: 1.5;"></div>' +
+                        '</div>' +
+                        '<div style="background: linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(46, 204, 113, 0.05) 100%); border-left: 4px solid #2ecc71; border-radius: 0 8px 8px 0; padding: 16px;">' +
+                            '<div style="color: #2ecc71; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;"><span>💡</span> How to Fix</div>' +
+                            '<div id="reasonSolutions" style="color: rgba(255,255,255,0.9); font-size: 13px; line-height: 1.6;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="cron-modal-footer" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1);">' +
+                    '<button class="btn btn-secondary" id="reasonModalCancel">Close</button>' +
+                    '<button class="btn" style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); border: none; color: white; font-weight: 500;" id="reasonModalResolve">✓ Mark Resolved</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+    // Search Query Preview Modal - shows the underlying search SPL
+    var searchPreviewModalHtml =
+        '<div class="cron-modal-overlay" id="searchPreviewModalOverlay">' +
+            '<div class="cron-modal" style="max-width: 900px; width: 95%;">' +
+                '<div class="cron-modal-header" style="background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, transparent 100%);">' +
+                    '<h2 style="color: #00d4ff;"><span style="margin-right: 8px;">🔍</span>Search Query Preview</h2>' +
+                    '<button class="cron-modal-close" id="searchPreviewModalClose">&times;</button>' +
+                '</div>' +
+                '<div class="cron-modal-body" style="padding: 20px;">' +
+                    '<div id="searchPreviewModalContent">' +
+                        '<div class="search-preview-section" style="margin-bottom: 15px;">' +
+                            '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">Search Name</div>' +
+                            '<div id="searchPreviewName" style="color: #00d4ff; font-size: 14px; font-weight: 600; word-break: break-word;"></div>' +
+                        '</div>' +
+                        '<div class="search-preview-section" style="margin-bottom: 15px;">' +
+                            '<div style="display: flex; gap: 20px;">' +
+                                '<div style="flex: 1;">' +
+                                    '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">Owner</div>' +
+                                    '<div id="searchPreviewOwner" style="color: #ffffff; font-size: 13px;"></div>' +
+                                '</div>' +
+                                '<div style="flex: 1;">' +
+                                    '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">App</div>' +
+                                    '<div id="searchPreviewApp" style="color: #ffffff; font-size: 13px;"></div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="search-preview-section">' +
+                            '<div class="search-preview-label" style="color: rgba(255,255,255,0.6); font-size: 11px; text-transform: uppercase; margin-bottom: 6px;">Search Query (SPL)</div>' +
+                            '<div id="searchPreviewQuery" style="background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; font-family: Monaco, Consolas, monospace; font-size: 12px; color: #e6e6e6; white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; line-height: 1.5;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="cron-modal-footer">' +
+                    '<button class="btn btn-secondary" id="searchPreviewModalCancel">Close</button>' +
+                    '<button class="btn" style="background: #00d4ff; border-color: #00d4ff; color: #000;" id="searchPreviewCopy">📋 Copy Query</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
     var currentCronSearch = { name: '', cron: '', owner: '', app: '' };
     var currentImpactSearch = { name: '', owner: '', app: '' };
     var currentExtendSearches = [];
     var currentExtendDays = 7;
     var selectedRow = { searchName: '', owner: '', app: '', reason: '', tableType: '' };
     var selectedSearches = []; // Array for multi-select
+    var currentReasonSearch = { name: '', reason: '' };
+    var currentSearchPreview = { name: '', owner: '', app: '', query: '' };
 
     function initModals() {
         if (!$('#cronModalOverlay').length) {
@@ -1618,6 +1791,55 @@ require([
         if (!$('#metricPopupOverlay').length) {
             $('body').append(metricPopupHtml);
         }
+        if (!$('#reasonModalOverlay').length) {
+            $('body').append(reasonModalHtml);
+        }
+        if (!$('#searchPreviewModalOverlay').length) {
+            $('body').append(searchPreviewModalHtml);
+        }
+
+        // Reason modal events
+        $(document).on('click', '#reasonModalClose, #reasonModalCancel', function() {
+            $('#reasonModalOverlay').removeClass('active');
+        });
+
+        $(document).on('click', '#reasonModalOverlay', function(e) {
+            if (e.target === this) {
+                $('#reasonModalOverlay').removeClass('active');
+            }
+        });
+
+        $(document).on('click', '#reasonModalResolve', function() {
+            if (currentReasonSearch.name) {
+                updateSearchStatus(currentReasonSearch.name, 'resolved');
+                $('#reasonModalOverlay').removeClass('active');
+            }
+        });
+
+        // Search preview modal events
+        $(document).on('click', '#searchPreviewModalClose, #searchPreviewModalCancel', function() {
+            $('#searchPreviewModalOverlay').removeClass('active');
+        });
+
+        $(document).on('click', '#searchPreviewModalOverlay', function(e) {
+            if (e.target === this) {
+                $('#searchPreviewModalOverlay').removeClass('active');
+            }
+        });
+
+        $(document).on('click', '#searchPreviewCopy', function() {
+            var query = currentSearchPreview.query;
+            if (query && navigator.clipboard) {
+                navigator.clipboard.writeText(query).then(function() {
+                    var $btn = $('#searchPreviewCopy');
+                    var originalText = $btn.text();
+                    $btn.text('✓ Copied!').css('background', '#53a051');
+                    setTimeout(function() {
+                        $btn.text(originalText).css('background', '#00d4ff');
+                    }, 1500);
+                });
+            }
+        });
 
         // Extend modal events
         $(document).on('click', '#extendModalClose, #extendModalCancel', function() {
@@ -1681,20 +1903,30 @@ require([
         }
         window.closeMetricPopup = closeMetricPopup;
 
-        // Metric popup select all checkbox
-        $(document).on('change', '#metricSelectAll', function() {
-            var isChecked = $(this).prop('checked');
-            $('.metric-row-checkbox').prop('checked', isChecked);
-        });
-
-        // Metric popup row click to toggle checkbox (exclude status dropdown)
-        $(document).on('click', '.metric-popup-row td:not(:first-child)', function(e) {
-            // Don't toggle checkbox if clicking on status dropdown
+        // Metric popup row click handler - toggle selection for bulk actions
+        $(document).on('click', '.metric-popup-row td', function(e) {
+            // Don't process if clicking on status dropdown
             if ($(e.target).closest('.status-dropdown-wrapper').length > 0) {
                 return;
             }
-            var $checkbox = $(this).closest('tr').find('.metric-row-checkbox');
-            $checkbox.prop('checked', !$checkbox.prop('checked'));
+            // Toggle selected state on click
+            var $row = $(this).closest('tr');
+            $row.toggleClass('selected');
+
+            // Update selection count display
+            var selectedCount = $('.metric-popup-row.selected').length;
+            var $footer = $('#metricPopupOverlay .metric-popup-footer');
+            var $countDisplay = $footer.find('.selection-count');
+
+            if (selectedCount > 0) {
+                if ($countDisplay.length === 0) {
+                    $footer.prepend('<span class="selection-count" style="color: #00d4ff; font-weight: 600; padding: 8px 12px; background: rgba(0,212,255,0.1); border-radius: 4px; margin-right: auto;">' + selectedCount + ' selected</span>');
+                } else {
+                    $countDisplay.text(selectedCount + ' selected');
+                }
+            } else {
+                $countDisplay.remove();
+            }
         });
 
         // Status dropdown click handler - show status change menu
@@ -1719,23 +1951,14 @@ require([
             // Check if search is already flagged (OK/Suspicious statuses can only be flagged, others have full options)
             var isUnflagged = currentStatus && (currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious');
 
-            // Available status options based on context
-            var statuses;
-            if (isSuspicious || isUnflagged) {
-                // Suspicious/unflagged searches can only be flagged
-                statuses = [
-                    { value: 'pending', label: 'Flag for Review', color: '#f8991d' }
-                ];
-            } else {
-                // Flagged searches have full status options
-                statuses = [
-                    { value: 'pending', label: 'Flagged', color: '#f8991d' },
-                    { value: 'notified', label: 'Notified', color: '#f8be34' },
-                    { value: 'review', label: 'Pending Review', color: '#6f42c1' },
-                    { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
-                    { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
-                ];
-            }
+            // All status options available in dropdown
+            var statuses = [
+                { value: 'pending', label: 'Flag for Review', color: '#f8991d' },
+                { value: 'notified', label: 'Notified', color: '#f8be34' },
+                { value: 'review', label: 'Pending Review', color: '#6f42c1' },
+                { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
+                { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
+            ];
 
             var menuHtml = '<div class="status-dropdown-menu" style="position: absolute; top: 100%; left: 0; z-index: 10000; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); min-width: 160px;">';
             statuses.forEach(function(s) {
@@ -1767,10 +1990,26 @@ require([
             // Also get parent wrapper's current status to check if unflagged
             var $wrapper = $(this).closest('.status-dropdown-wrapper');
             var currentStatus = $wrapper.data('current-status') || '';
-            var isUnflagged = currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious';
+            var currentStatusLower = currentStatus.toLowerCase();
+            var isUnflagged = currentStatusLower === 'ok' || currentStatusLower === 'suspicious';
+
+            // Check if already flagged (pending, notified, disabled, review states)
+            var isAlreadyFlagged = currentStatusLower === 'flagged' ||
+                                   currentStatusLower === 'pending' ||
+                                   currentStatusLower === 'notified' ||
+                                   currentStatusLower === 'disabled' ||
+                                   currentStatusLower === 'review' ||
+                                   currentStatusLower.indexOf('pending') > -1 ||
+                                   currentStatusLower.indexOf('disabled') > -1;
 
             // Close menu
             $('.status-dropdown-menu').remove();
+
+            // If trying to flag an already flagged search, show error
+            if (newStatus === 'pending' && isAlreadyFlagged) {
+                alert('This search is already flagged.\n\nCurrent status: ' + currentStatus + '\n\nUse a different status option to change its state.');
+                return;
+            }
 
             showToast('Updating status...');
 
@@ -2683,7 +2922,7 @@ require([
 
         function getSelectedMetricSearches() {
             var selected = [];
-            $('.metric-row-checkbox:checked').each(function() {
+            $('.metric-popup-row.selected').each(function() {
                 var index = parseInt($(this).attr('data-index'));
                 if (currentMetricSearches[index]) {
                     selected.push(currentMetricSearches[index]);
@@ -2715,12 +2954,28 @@ require([
 
             // Watch for last action display token
             defaultTokens.on('change:last_action_display', function(model, value) {
-                if (value) {
+                // Check for valid value (not empty, null, or unexpanded token)
+                if (value && !value.includes('$result.') && value !== 'null') {
                     $('#lastActionTimestamp').text(value);
                 } else {
-                    $('#lastActionTimestamp').text('No actions recorded');
+                    // Token didn't expand properly - try fallback
+                    fetchLastGovernanceAction();
                 }
             });
+
+            // Also check the token value immediately (in case it was already set)
+            var existingLastAction = defaultTokens.get('last_action_display');
+            if (existingLastAction && !existingLastAction.includes('$result.') && existingLastAction !== 'null') {
+                $('#lastActionTimestamp').text(existingLastAction);
+            }
+
+            // Fallback: fetch last action directly via REST after a delay
+            setTimeout(function() {
+                var currentText = $('#lastActionTimestamp').text();
+                if (currentText === 'Loading...' || currentText.includes('$result.') || currentText === '$result.display$') {
+                    fetchLastGovernanceAction();
+                }
+            }, 3000);
 
             // Watch for metric popup token (old format)
             defaultTokens.on('change:show_metric_popup', function(model, value) {
@@ -2893,26 +3148,38 @@ require([
             }
 
             function fallbackRestUpdate() {
-                // Try multiple endpoint formats with different owner contexts
-                var contexts = [
-                    { owner: owner, app: app },
-                    { owner: 'nobody', app: app },
-                    { owner: '-', app: app }
-                ];
+                // First, find the search with wildcard context to get the real owner/app
+                var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
+                var localePrefix = locale ? '/' + locale[1] : '';
+                var findEndpoint = localePrefix + '/splunkd/__raw/servicesNS/-/-/saved/searches/' + encodeURIComponent(searchName) + '?output_mode=json';
 
-                function tryContext(ctxIndex) {
-                    if (ctxIndex >= contexts.length) {
-                        alert("Failed to update schedule. Please update manually in Settings > Searches, Reports, and Alerts.");
-                        return;
+                console.log("Finding search at:", findEndpoint);
+
+                $.ajax({
+                    url: findEndpoint,
+                    type: 'GET',
+                    success: function(response) {
+                        // Extract actual owner and app from the response
+                        var entry = response.entry && response.entry[0];
+                        if (entry && entry.acl) {
+                            var realOwner = entry.acl.owner || owner;
+                            var realApp = entry.acl.app || app;
+                            console.log("Found search - owner:", realOwner, "app:", realApp);
+                            updateWithContext(realOwner, realApp);
+                        } else {
+                            console.log("Search found but no ACL info, trying contexts...");
+                            tryContexts(0);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("Search not found with wildcard, trying specific contexts...");
+                        tryContexts(0);
                     }
+                });
 
-                    var ctx = contexts[ctxIndex];
-                    // Try both endpoint formats
-                    var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
-                    var localePrefix = locale ? '/' + locale[1] : '';
-                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(searchName);
-
-                    console.log("Trying REST endpoint:", endpoint, "context:", ctx);
+                function updateWithContext(ctxOwner, ctxApp) {
+                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctxOwner) + '/' + encodeURIComponent(ctxApp) + '/saved/searches/' + encodeURIComponent(searchName);
+                    console.log("Updating at:", endpoint);
 
                     $.ajax({
                         url: endpoint,
@@ -2926,14 +3193,48 @@ require([
                             onUpdateSuccess();
                         },
                         error: function(xhr, status, error) {
-                            console.error("REST update failed:", xhr.status, xhr.responseText, "trying next context...");
-                            // Try next context
-                            tryContext(ctxIndex + 1);
+                            console.error("REST update failed at", ctxOwner + "/" + ctxApp, ":", xhr.status, xhr.responseText);
+                            // Fall back to context tries
+                            tryContexts(0);
                         }
                     });
                 }
 
-                tryContext(0);
+                // Try multiple contexts as fallback
+                var contexts = [
+                    { owner: owner, app: app },
+                    { owner: 'nobody', app: app },
+                    { owner: 'admin', app: app }
+                ];
+
+                function tryContexts(ctxIndex) {
+                    if (ctxIndex >= contexts.length) {
+                        alert("Failed to update schedule. Please update manually in Settings > Searches, Reports, and Alerts.");
+                        return;
+                    }
+
+                    var ctx = contexts[ctxIndex];
+                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(searchName);
+
+                    console.log("Trying context:", ctx.owner + "/" + ctx.app);
+
+                    $.ajax({
+                        url: endpoint,
+                        type: 'POST',
+                        data: {
+                            cron_schedule: newCron,
+                            output_mode: 'json'
+                        },
+                        success: function(response) {
+                            console.log("Cron schedule updated successfully via REST:", response);
+                            onUpdateSuccess();
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Context failed:", xhr.status);
+                            tryContexts(ctxIndex + 1);
+                        }
+                    });
+                }
             }
 
             function onUpdateSuccess() {
@@ -3121,6 +3422,248 @@ require([
             return 'Runs on weekdays at ' + hour + ':' + (minute === '0' ? '00' : minute);
         }
         return 'Custom schedule';
+    }
+
+    // Get recommended solutions based on the suspicious reason
+    function getReasonSolutions(reason) {
+        var solutions = [];
+        var lowerReason = (reason || '').toLowerCase();
+
+        if (lowerReason.indexOf('high runtime') > -1 || lowerReason.indexOf('runtime ratio') > -1 || lowerReason.indexOf('excessive runtime') > -1) {
+            solutions.push('<li><strong>Replace with tstats:</strong> <code>| tstats count WHERE index=* BY host</code> is 10-100x faster than stats</li>');
+            solutions.push('<li><strong>Add early filters:</strong> Move <code>WHERE</code> clauses before <code>stats</code> - filter first, aggregate second</li>');
+            solutions.push('<li><strong>Use summary indexing:</strong> Pre-aggregate with <code>collect</code> or <code>mcollect</code> for repeated queries</li>');
+            solutions.push('<li><strong>Limit fields:</strong> Add <code>| fields field1, field2</code> early to reduce memory usage</li>');
+            solutions.push('<li><strong>Reduce time range:</strong> Change from 24h to 1h if fresher data works for your use case</li>');
+        } else if (lowerReason.indexOf('frequent') > -1 || lowerReason.indexOf('runs every') > -1 || lowerReason.indexOf('schedule') > -1) {
+            solutions.push('<li><strong>Batch it:</strong> Change from */5 to */15 or 0 * * * * (hourly) - most alerts don\'t need 5-min granularity</li>');
+            solutions.push('<li><strong>Use real-time alerts:</strong> For true urgency, use real-time search instead of frequent scheduled</li>');
+            solutions.push('<li><strong>Stagger execution:</strong> Change <code>*/5 * * * *</code> to <code>3,8,13,18... * * * *</code> to spread load</li>');
+            solutions.push('<li><strong>Enable acceleration:</strong> For reports, enable Report Acceleration in Settings > Searches</li>');
+        } else if (lowerReason.indexOf('wildcard') > -1 || lowerReason.indexOf('all index') > -1 || lowerReason.indexOf('index=*') > -1) {
+            solutions.push('<li><strong>Target specific indexes:</strong> Replace <code>index=*</code> with <code>index=main index=security</code></li>');
+            solutions.push('<li><strong>Use index prefixes:</strong> <code>index=prod_*</code> is faster than <code>index=*</code></li>');
+            solutions.push('<li><strong>Add sourcetype filter:</strong> <code>sourcetype=access_log</code> reduces search scope significantly</li>');
+            solutions.push('<li><strong>Create a data model:</strong> For repeated queries, accelerated data models are much faster</li>');
+        } else if (lowerReason.indexOf('expensive') > -1 || lowerReason.indexOf('cost') > -1 || lowerReason.indexOf('resource') > -1) {
+            solutions.push('<li><strong>Simplify subsearches:</strong> Replace <code>[search ...]</code> with lookups or append where possible</li>');
+            solutions.push('<li><strong>Avoid eval in stats:</strong> Pre-calculate eval fields before <code>| stats</code></li>');
+            solutions.push('<li><strong>Use dedup wisely:</strong> <code>dedup 10 host</code> is faster than <code>dedup host</code></li>');
+            solutions.push('<li><strong>Consider archival:</strong> If data is rarely accessed, move to frozen tier</li>');
+        } else if (lowerReason.indexOf('owner') > -1 || lowerReason.indexOf('orphan') > -1 || lowerReason.indexOf('unknown') > -1) {
+            solutions.push('<li><strong>Transfer ownership:</strong> In Settings > Searches, change owner to active user or splunk-system-user</li>');
+            solutions.push('<li><strong>Document purpose:</strong> Add description field explaining what this search does and why</li>');
+            solutions.push('<li><strong>Set up alerts:</strong> Configure email alerts so someone is notified if it fails</li>');
+            solutions.push('<li><strong>Consider deletion:</strong> If no one claims it after 30 days, it may be safe to disable</li>');
+        } else if (lowerReason.indexOf('transaction') > -1 || lowerReason.indexOf('join') > -1) {
+            solutions.push('<li><strong>Replace transaction:</strong> Use <code>stats values() BY</code> instead - 5-10x faster</li>');
+            solutions.push('<li><strong>Replace join:</strong> Use <code>| append</code> + <code>| stats</code> or lookups instead</li>');
+            solutions.push('<li><strong>Limit transaction scope:</strong> Add <code>maxspan=1h</code> and <code>maxevents=1000</code></li>');
+            solutions.push('<li><strong>Pre-aggregate:</strong> Create a summary index with the grouped data</li>');
+        } else {
+            solutions.push('<li><strong>Validate business need:</strong> Confirm with stakeholders if this search is still required</li>');
+            solutions.push('<li><strong>Schedule off-peak:</strong> Move to run at 2-5 AM local time when cluster is less busy</li>');
+            solutions.push('<li><strong>Add monitoring:</strong> Set up job inspector alerts for searches exceeding 5 min runtime</li>');
+            solutions.push('<li><strong>Document:</strong> Add a description explaining purpose, owner contact, and SLA requirements</li>');
+        }
+
+        var html = '<ul style="margin: 0; padding-left: 0; list-style: none;">';
+        solutions.forEach(function(sol, idx) {
+            html += '<li style="padding: 10px 12px; margin-bottom: 8px; background: rgba(46, 204, 113, 0.08); border-radius: 6px; border-left: 3px solid #2ecc71; font-size: 13px; line-height: 1.5;">' + sol.replace('<li>', '').replace('</li>', '') + '</li>';
+        });
+        html += '</ul>';
+        return html;
+    }
+
+    // Open the reason details modal
+    function showReasonModal(searchName, reason) {
+        currentReasonSearch = { name: searchName, reason: reason };
+
+        $('#reasonSearchName').text(searchName || 'Unknown');
+
+        if (reason && reason.trim()) {
+            // Format the reason more descriptively
+            var formattedReason = formatReasonDescription(reason);
+            $('#reasonDescription').html(formattedReason);
+        } else {
+            $('#reasonDescription').html('<p style="margin: 0; color: rgba(255,255,255,0.6);">No specific reason recorded. This search may have been flagged manually or detected as suspicious by an automated rule.</p>');
+        }
+
+        $('#reasonSolutions').html(getReasonSolutions(reason));
+
+        $('#reasonModalOverlay').addClass('active');
+    }
+
+    // Format the reason with more descriptive context
+    function formatReasonDescription(reason) {
+        if (!reason) return '';
+
+        var lowerReason = reason.toLowerCase();
+        var icon = '⚠️';
+        var category = 'Performance Issue';
+        var impact = '';
+
+        // Determine icon and category based on reason
+        if (lowerReason.indexOf('join') > -1 || lowerReason.indexOf('transaction') > -1) {
+            icon = '🔗';
+            category = 'Expensive Command';
+            impact = 'Join and transaction commands are memory-intensive and can cause indexer slowdowns during peak hours.';
+        } else if (lowerReason.indexOf('runtime') > -1 || lowerReason.indexOf('exceeds') > -1) {
+            icon = '⏱️';
+            category = 'High Runtime';
+            impact = 'Search runs longer than its schedule allows, potentially causing overlapping executions and queue buildup.';
+        } else if (lowerReason.indexOf('every 5 min') > -1 || lowerReason.indexOf('frequency') > -1 || lowerReason.indexOf('frequent') > -1) {
+            icon = '🔄';
+            category = 'High Frequency';
+            impact = 'Running every 5 minutes or less creates significant load. Consider if this frequency is truly necessary.';
+        } else if (lowerReason.indexOf('wildcard') > -1 || lowerReason.indexOf('index=*') > -1) {
+            icon = '🔍';
+            category = 'Broad Search Scope';
+            impact = 'Searching all indexes scans massive amounts of data. Targeting specific indexes can improve performance 10x.';
+        } else if (lowerReason.indexOf('expensive') > -1 || lowerReason.indexOf('cost') > -1) {
+            icon = '💰';
+            category = 'Resource Cost';
+            impact = 'This search consumes significant computing resources that could affect other users and searches.';
+        } else if (lowerReason.indexOf('owner') > -1 || lowerReason.indexOf('orphan') > -1) {
+            icon = '👤';
+            category = 'Ownership Issue';
+            impact = 'The search owner may no longer be active. This creates risk if the search fails with no one to respond.';
+        }
+
+        var html = '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+            '<div style="display: flex; align-items: center; gap: 10px;">' +
+                '<span style="font-size: 24px;">' + icon + '</span>' +
+                '<div>' +
+                    '<div style="color: #f8be34; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">' + category + '</div>' +
+                    '<div style="color: #fff; font-size: 15px; font-weight: 500;">' + escapeHtml(reason) + '</div>' +
+                '</div>' +
+            '</div>';
+
+        if (impact) {
+            html += '<div style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px 12px; color: rgba(255,255,255,0.8); font-size: 13px; line-height: 1.5;">' +
+                '<strong style="color: #f8be34;">Impact:</strong> ' + impact +
+            '</div>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    // Show search query preview modal - fetches the actual search SPL from REST API
+    function showSearchPreviewModal(searchName, owner, app) {
+        currentSearchPreview = { name: searchName, owner: owner, app: app, query: '' };
+
+        $('#searchPreviewName').text(searchName || 'Unknown');
+        $('#searchPreviewOwner').text(owner || '-');
+        $('#searchPreviewApp').text(app || '-');
+        $('#searchPreviewQuery').html('<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 20px;">Loading search query...</div>');
+
+        $('#searchPreviewModalOverlay').addClass('active');
+
+        // Fetch the search query from REST API
+        var localePrefix = '';
+        var pathParts = window.location.pathname.split('/');
+        if (pathParts.length > 1 && pathParts[1].match(/^[a-z]{2}(-[A-Z]{2})?$/)) {
+            localePrefix = '/' + pathParts[1];
+        }
+
+        var endpoint = localePrefix + '/splunkd/__raw/servicesNS/-/-/saved/searches/' + encodeURIComponent(searchName) + '?output_mode=json';
+
+        $.ajax({
+            url: endpoint,
+            type: 'GET',
+            success: function(response) {
+                if (response && response.entry && response.entry.length > 0) {
+                    var entry = response.entry[0];
+                    var searchQuery = entry.content && entry.content.search ? entry.content.search : 'No search query found';
+
+                    currentSearchPreview.query = searchQuery;
+
+                    // Format the query with syntax highlighting
+                    var formattedQuery = formatSplunkQuery(searchQuery);
+                    $('#searchPreviewQuery').html(formattedQuery);
+                } else {
+                    $('#searchPreviewQuery').html('<div style="color: #dc4e41;">Unable to load search query</div>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error fetching search:', error);
+                $('#searchPreviewQuery').html('<div style="color: #dc4e41;">Error loading search: ' + escapeHtml(error) + '</div>');
+            }
+        });
+    }
+
+    // Format SPL query with safe syntax highlighting using placeholder approach
+    function formatSplunkQuery(query) {
+        if (!query) return '';
+
+        // First escape HTML to prevent XSS
+        var text = escapeHtml(query);
+
+        // Use unique placeholders that won't appear in SPL to avoid cascading regex issues
+        var placeholders = [];
+        var phIndex = 0;
+
+        function addPlaceholder(content, style) {
+            var ph = '\uE000' + phIndex + '\uE001';
+            placeholders.push({ ph: ph, content: content, style: style });
+            phIndex++;
+            return ph;
+        }
+
+        // Step 1: Protect quoted strings first
+        text = text.replace(/"([^"]+)"/g, function(match, p1) {
+            return addPlaceholder('"' + p1 + '"', 'color: #a5d6ff');
+        });
+
+        // Step 2: Format pipes with newlines
+        text = text.replace(/\s*\|\s*/g, function() {
+            return '\n' + addPlaceholder('|', 'color: #00d4ff; font-weight: bold') + ' ';
+        });
+
+        // Step 3: Highlight commands (first word after pipe or at start)
+        var lines = text.split('\n');
+        var formattedLines = lines.map(function(line) {
+            if (!line.trim()) return line;
+            // First word after pipe placeholder is a command
+            if (line.indexOf('\uE000') === 0) {
+                return line.replace(/(\uE000\d+\uE001 )(\w+)/, function(match, ph, cmd) {
+                    return ph + addPlaceholder(cmd, 'color: #ff7b72; font-weight: 600');
+                });
+            } else {
+                // First line without pipe - highlight first word as command
+                return line.replace(/^(\w+)/, function(match) {
+                    return addPlaceholder(match, 'color: #ff7b72; font-weight: 600');
+                });
+            }
+        });
+        text = formattedLines.join('\n');
+
+        // Step 4: Highlight field=value pairs (but not inside placeholders)
+        text = text.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*=)/g, function(match, field) {
+            // Skip if already a placeholder
+            if (match.indexOf('\uE000') >= 0) return match;
+            return addPlaceholder(field, 'color: #f8be34');
+        });
+
+        // Step 5: Highlight keywords
+        var keywords = ['BY', 'AS', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'OUTPUT', 'OUTPUTNEW', 'FROM', 'INTO'];
+        keywords.forEach(function(kw) {
+            var regex = new RegExp('\\b(' + kw + ')\\b', 'gi');
+            text = text.replace(regex, function(match) {
+                return addPlaceholder(match, 'color: #ff7b72');
+            });
+        });
+
+        // Step 6: Replace all placeholders with actual HTML spans
+        placeholders.forEach(function(p) {
+            text = text.replace(p.ph, '<span style="' + p.style + '">' + p.content + '</span>');
+        });
+
+        // Clean up any leading newline
+        text = text.replace(/^\n/, '');
+
+        return text;
     }
 
     function openCronModal(searchName, cronSchedule, owner, app) {
@@ -3361,8 +3904,8 @@ require([
 
         $('#metricPopupValue').text(value);
         $('#metricPopupTitle').text(title);
-        $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Dashboard</th><th>Owner</th><th>App</th><th>Sharing</th><th>Size (KB)</th></tr>');
-        $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        $('#metricPopupTableHead').html('<tr><th>Dashboard</th><th>Owner</th><th>App</th><th>Sharing</th><th>Size (KB)</th></tr>');
+        $('#metricPopupTableBody').html('<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
         $('#metricPopupOverlay').addClass('active');
 
         // Store current dashboard type
@@ -3444,7 +3987,6 @@ require([
                         var sizeColor = parseFloat(sizeKb) > 25 ? '#dc4e41' : (parseFloat(sizeKb) > 10 ? '#f8be34' : '#53a051');
 
                         html += '<tr class="metric-popup-row" data-index="' + i + '" data-dashboard-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
-                            '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
                             '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
                             '<td style="padding: 8px;">' + escapeHtml(owner) + '</td>' +
                             '<td style="padding: 8px;">' + escapeHtml(app) + '</td>' +
@@ -3493,13 +4035,30 @@ require([
 
         $('#metricPopupValue').text(value);
         $('#metricPopupTitle').text(title);
+
+        // If value is 0, show funny message immediately without loading
+        if (value === '0' || value === 0 || parseInt(value) === 0) {
+            var colCount = (metricType === 'flagged' || metricType === 'expiring') ? 7 : 6;
+            var funnyMessage = getZeroItemMessage();
+            if (metricType === 'flagged' || metricType === 'expiring') {
+                $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            } else {
+                $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            }
+            $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: #5cc05c; padding: 30px; font-size: 14px;"><div style="font-size: 36px; margin-bottom: 10px;">🎉</div>' + funnyMessage + '</td></tr>');
+            $('#metricPopupOverlay').addClass('active');
+            window.currentMetricType = metricType;
+            updateMetricTypeButtons(metricType);
+            return; // Skip the search since there's nothing to load
+        }
+
         // Add "Time Remaining" column for flagged/expiring metrics
         if (metricType === 'flagged' || metricType === 'expiring') {
-            $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
-            $('#metricPopupTableBody').html('<tr><td colspan="7" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
-        } else {
-            $('#metricPopupTableHead').html('<tr><th style="width: 30px;"><input type="checkbox" id="metricSelectAll"></th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
             $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        } else {
+            $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableBody').html('<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
         }
         $('#metricPopupOverlay').addClass('active');
 
@@ -3552,7 +4111,8 @@ require([
 
                     var colCount = (metricType === 'flagged' || metricType === 'expiring') ? 7 : 6;
                     if (!rows || rows.length === 0) {
-                        $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No items found</td></tr>');
+                        var funnyMessage = getZeroItemMessage();
+                        $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: #5cc05c; padding: 30px; font-size: 14px;"><div style="font-size: 36px; margin-bottom: 10px;">🎉</div>' + funnyMessage + '</td></tr>');
                         return;
                     }
 
@@ -3588,7 +4148,7 @@ require([
                             '</div>';
 
                         html += '<tr class="metric-popup-row" data-index="' + i + '" data-search-name="' + escapeHtml(name) + '" style="cursor: pointer;">' +
-                            '<td style="padding: 8px;"><input type="checkbox" class="metric-row-checkbox" data-index="' + i + '"></td>' +
+                            '<td style="padding: 8px; width: 40px; text-align: center; color: rgba(255,255,255,0.4); font-size: 11px;">' + (i + 1) + '</td>' +
                             '<td style="padding: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</td>' +
                             '<td style="padding: 8px;" class="status-cell">' + clickableStatus + '</td>';
 
@@ -3711,8 +4271,8 @@ require([
             var isActivityPanel = panelTitle.indexOf('Activity') > -1 || panelTitle.indexOf('Audit') > -1 || panelTitle.indexOf('History') > -1;
             var isConfigTable = $table.attr('id') === 'cost_config_table' || panelTitle.indexOf('Current Cost Configuration') > -1 || panelTitle.indexOf('Configuration') > -1;
 
-            // Skip checkbox enhancement for cost-only panels, activity/audit log panels, and config tables
-            var skipCheckboxes = isCostPanel || isActivityPanel || isConfigTable;
+            // Skip checkbox enhancement - using status dropdown for all status changes instead
+            var skipCheckboxes = true;
 
             var scheduleColIndex = -1;
             var searchNameColIndex = -1;
@@ -3863,8 +4423,18 @@ require([
                 // Add disabled indicator next to search name if search is disabled
                 var isDisabled = false;
                 if (statusColIndex >= 0 && $cells.length > statusColIndex) {
-                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
-                    isDisabled = (statusText === 'disabled' || statusText.indexOf('disabled') > -1);
+                    var $statusCell = $cells.eq(statusColIndex);
+                    // Get status from the dropdown wrapper data attribute (more reliable)
+                    var $wrapper = $statusCell.find('.status-dropdown-wrapper');
+                    var statusText;
+                    if ($wrapper.length) {
+                        statusText = ($wrapper.data('current-status') || '').toLowerCase();
+                    } else {
+                        // Fallback to badge text only (not entire cell to avoid dropdown menu text)
+                        var $badge = $statusCell.find('.status-badge');
+                        statusText = ($badge.length ? $badge.text() : $statusCell.text()).trim().toLowerCase();
+                    }
+                    isDisabled = (statusText === 'disabled' || statusText === 'auto-disabled');
                 }
 
                 if (isDisabled && searchName) {
@@ -3887,8 +4457,18 @@ require([
                 // Add blue lightning bolt for suspicious (unflagged) searches
                 var isSuspicious = false;
                 if (statusColIndex >= 0 && $cells.length > statusColIndex) {
-                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
-                    isSuspicious = (statusText === 'suspicious');
+                    var $statusCell = $cells.eq(statusColIndex);
+                    // Get status from the dropdown wrapper data attribute (more reliable)
+                    var $wrapper = $statusCell.find('.status-dropdown-wrapper');
+                    var suspStatusText;
+                    if ($wrapper.length) {
+                        suspStatusText = ($wrapper.data('current-status') || '').toLowerCase();
+                    } else {
+                        // Fallback to badge text only (not entire cell to avoid dropdown menu text)
+                        var $badge = $statusCell.find('.status-badge');
+                        suspStatusText = ($badge.length ? $badge.text() : $statusCell.text()).trim().toLowerCase();
+                    }
+                    isSuspicious = (suspStatusText === 'suspicious');
                 }
 
                 if (isSuspicious && !isFlagged && searchName) {
@@ -3902,10 +4482,26 @@ require([
                     }
 
                     if ($searchNameCell.length && !$searchNameCell.find('.suspicious-indicator').length) {
-                        var suspiciousHtml = '<span class="suspicious-indicator" style="color: #17a2b8; margin-right: 6px; font-size: 12px;" title="Suspicious search pattern detected">⚡</span>';
+                        var suspiciousHtml = '<span class="suspicious-indicator" style="color: #f8be34; margin-right: 6px; font-size: 12px;" title="Suspicious search pattern detected">⚡</span>';
                         $searchNameCell.prepend(suspiciousHtml);
                     }
                     $row.addClass('row-suspicious');
+                }
+
+                // Add magnifying glass icon to view search query (on the right side of search name)
+                if (searchNameColIndex >= 0 && $cells.length > searchNameColIndex && searchName) {
+                    var $searchNameCell = $cells.eq(searchNameColIndex);
+
+                    // Only add if not already present
+                    if (!$searchNameCell.find('.search-preview-icon').length) {
+                        var previewHtml = '<span class="search-preview-icon" ' +
+                            'data-search="' + escapeHtml(searchName) + '" ' +
+                            'data-owner="' + escapeHtml(owner) + '" ' +
+                            'data-app="' + escapeHtml(app) + '" ' +
+                            'style="color: #00d4ff; margin-left: 8px; font-size: 12px; cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" ' +
+                            'title="View search query">🔍</span>';
+                        $searchNameCell.append(previewHtml);
+                    }
                 }
 
                 // Make status column interactive with dropdown (like modal)
@@ -3939,6 +4535,26 @@ require([
                     // If cron-clickable is missing but should exist, re-add it
                     if (!$scheduleCell.find('.cron-clickable').length && cronValue.match(/^[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+$/)) {
                         $scheduleCell.html('<span class="cron-clickable" data-cron="' + escapeHtml(cronValue) + '" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" data-app="' + escapeHtml(app) + '">' + escapeHtml(cronValue) + '</span>');
+                    }
+                }
+
+                // Enhance Reason column to be clickable for showing details modal
+                if (reasonColIndex >= 0 && $cells.length > reasonColIndex) {
+                    var $reasonCell = $cells.eq(reasonColIndex);
+                    var reasonValue = $reasonCell.text().trim();
+
+                    // Only enhance if there's a reason and not already enhanced
+                    if (reasonValue && !$reasonCell.find('.reason-clickable').length) {
+                        var truncatedReason = reasonValue.length > 40 ? reasonValue.substring(0, 40) + '...' : reasonValue;
+                        var reasonHtml = '<span class="reason-clickable" ' +
+                            'data-search="' + escapeHtml(searchName) + '" ' +
+                            'data-reason="' + escapeHtml(reasonValue) + '" ' +
+                            'style="cursor: pointer; color: #f8be34; text-decoration: underline; text-decoration-style: dotted;" ' +
+                            'title="Click to view details and solutions">' +
+                            escapeHtml(truncatedReason) +
+                            '<span style="margin-left: 4px; font-size: 10px;">ℹ️</span>' +
+                            '</span>';
+                        $reasonCell.html(reasonHtml);
                     }
                 }
             });
@@ -4093,10 +4709,36 @@ require([
         openFlaggedModal();
     });
 
+    // Click handler for search preview icon - opens search query modal
+    $(document).on('click', '.search-preview-icon', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var $el = $(this);
+        var searchName = $el.attr('data-search') || $el.data('search');
+        var owner = $el.attr('data-owner') || $el.data('owner');
+        var app = $el.attr('data-app') || $el.data('app');
+
+        console.log("Search preview clicked:", searchName);
+        showSearchPreviewModal(searchName, owner, app);
+
+        return false;
+    });
+
+    // Hover effect for search preview icon
+    $(document).on('mouseenter', '.search-preview-icon', function() {
+        $(this).css('opacity', '1');
+    });
+
+    $(document).on('mouseleave', '.search-preview-icon', function() {
+        $(this).css('opacity', '0.7');
+    });
+
     // Row click for selection (not on checkbox, cron, or flag)
     $(document).on('click', '.gov-enhanced td:not(.gov-checkbox-cell)', function(e) {
         // Don't handle if clicking on interactive elements
-        if ($(e.target).is('input, .cron-clickable, .flag-indicator')) {
+        if ($(e.target).is('input, .cron-clickable, .flag-indicator, .search-preview-icon')) {
             return;
         }
 
@@ -4127,6 +4769,22 @@ require([
         var total = $table.find('.gov-checkbox').length;
         var checked = $table.find('.gov-checkbox:checked').length;
         $table.find('.gov-select-all').prop('checked', total === checked);
+    });
+
+    // Click handler for reason column - opens reason details modal
+    $(document).on('click', '.reason-clickable', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        var $el = $(this);
+        var searchName = $el.attr('data-search') || $el.data('search');
+        var reason = $el.attr('data-reason') || $el.data('reason');
+
+        console.log("Reason clicked:", searchName, reason);
+        showReasonModal(searchName, reason);
+
+        return false;
     });
 
     // Click handler for cron - use event delegation with high priority
