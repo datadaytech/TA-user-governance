@@ -1,0 +1,342 @@
+<dashboard version="1.1" theme="dark" script="governance.js" stylesheet="governance.css">
+  <label>Scheduled Search Governance</label>
+  <description>Monitor, flag, and enforce policies on scheduled searches</description>
+
+  <!-- Initialization -->
+  <init>
+    <set token="show_flagged_only">false</set>
+    <set token="view_mode">all</set>
+  </init>
+
+  <!-- Last Action Timestamp -->
+  <row>
+    <panel>
+      <html>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+          <span style="color: rgba(255,255,255,0.6); font-size: 12px;">LAST GOVERNANCE ACTION</span>
+          <span id="lastActionTimestamp" style="color: #00d4ff; font-weight: 600; font-size: 13px;">Loading...</span>
+          <span style="color: rgba(255,255,255,0.4); font-size: 11px;">Data cached every 5 min</span>
+        </div>
+      </html>
+      <search>
+        <query>| inputlookup governance_audit_log_lookup | sort - timestamp | head 1 | eval display = strftime(timestamp, "%Y-%m-%d %H:%M:%S") . " - " . action . " by " . performed_by | table display</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+        <refresh>30s</refresh>
+        <done>
+          <set token="last_action_display">$result.display$</set>
+        </done>
+      </search>
+    </panel>
+  </row>
+
+  <!-- Summary Metrics Row - Using cached data -->
+  <row>
+    <panel id="total_metric_panel">
+      <single id="total_metric">
+        <title>Total Scheduled Searches</title>
+        <search>
+          <query>| inputlookup governance_search_cache.csv
+| search disabled=0
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="useColors">0</option>
+        <drilldown>
+          <set token="metric_popup_type">total</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Total Scheduled Searches</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel id="suspicious_metric_panel">
+      <single id="suspicious_metric">
+        <title>Suspicious (Unflagged)</title>
+        <search>
+          <query>| inputlookup governance_search_cache.csv
+| search is_suspicious=1 disabled=0
+| where isnull(flag_status) OR (flag_status!="pending" AND flag_status!="notified" AND flag_status!="disabled")
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[5,10]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">suspicious</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Suspicious Searches</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel id="flagged_metric_panel">
+      <single id="flagged_metric">
+        <title>Currently Flagged</title>
+        <search>
+          <query>| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" OR status="disabled" | stats dc(search_name) as count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[3,7]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">flagged</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Flagged Searches</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel id="expiring_metric_panel">
+      <single id="expiring_metric">
+        <title>Expiring Soon (≤3 Days)</title>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| search status="pending" OR status="notified"
+| dedup search_name
+| eval days_remaining = round((remediation_deadline - now()) / 86400, 1)
+| where days_remaining >= 0 AND days_remaining &lt;= 3
+| stats count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[1,3]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">expiring</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Expiring Soon</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel id="disabled_metric_panel">
+      <single id="disabled_metric">
+        <title>Auto-Disabled (This Period)</title>
+        <search>
+          <query>| inputlookup flagged_searches_lookup
+| search status="disabled"
+| dedup search_name
+| eval days_ago = (now() - flagged_time) / 86400
+| where days_ago &lt;= 7
+| stats count as disabled_count
+| eval disabled_count = if(isnull(disabled_count), 0, disabled_count)
+| table disabled_count</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0x006d9c"]</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <set token="metric_popup_type">disabled</set>
+          <set token="metric_popup_value">$click.value$</set>
+          <set token="metric_popup_title">Auto-Disabled Searches</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+
+  <!-- Suspicious Searches Alert Panel - Using cached data -->
+  <row>
+    <panel>
+      <title>Suspicious Scheduled Searches - Requires Review</title>
+      <table id="suspicious_searches_table">
+        <search>
+          <query>| inputlookup governance_search_cache.csv
+| search is_suspicious=1 disabled=0
+| lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status, remediation_deadline
+| eval is_flagged = if(isnotnull(flag_status) AND (flag_status="pending" OR flag_status="notified"), "Yes", "No")
+| eval days_remaining = if(isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), "N/A")
+| table title, owner, app, cron_schedule, frequency_label, avg_runtime_display, runtime_ratio, svc_per_run, monthly_cost, suspicious_reason, is_flagged, days_remaining
+| rename title as "Search Name", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", runtime_ratio as "Runtime Ratio %", svc_per_run as "SVC/Run", monthly_cost as "Monthly Cost", suspicious_reason as "Reason", is_flagged as "Flagged", days_remaining as "Days Left"
+| sort - "Runtime Ratio %"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>1m</refresh>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Runtime Ratio %">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midValue="10"></scale>
+        </format>
+        <format type="color" field="Flagged">
+          <colorPalette type="map">{"Yes":#DC4E41,"No":#53A051}</colorPalette>
+        </format>
+        <format type="color" field="Days Left">
+          <colorPalette type="minMidMax" maxColor="#53A051" midColor="#F8BE34" minColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="3" maxValue="7"></scale>
+        </format>
+        <format type="number" field="Monthly Cost">
+          <option name="precision">2</option>
+          <option name="unit">$</option>
+        </format>
+      </table>
+      <html>
+        <div class="action-buttons" id="suspicious-actions">
+          <button class="btn btn-primary" id="flag-selected-btn">Flag Selected</button>
+          <button class="btn" id="unflag-selected-btn">Unflag Selected</button>
+          <button class="btn" id="preview-impact-btn">Preview Impact</button>
+          <button class="btn" id="email-owner-btn">Email Owner</button>
+          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" id="view-flagged-btn">View All Flagged</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Combined Scheduled Searches Panel with Toggle - Using cached data -->
+  <row>
+    <panel>
+      <title>All Scheduled Searches</title>
+      <input type="dropdown" token="view_filter" searchWhenChanged="true">
+        <label>View</label>
+        <choice value="all">All Searches</choice>
+        <choice value="flagged">Flagged Only (Pending Remediation)</choice>
+        <choice value="expiring">Expiring Soon (≤3 Days)</choice>
+        <choice value="suspicious">Suspicious Only</choice>
+        <default>all</default>
+      </input>
+      <input type="dropdown" token="filter_status" searchWhenChanged="true">
+        <label>Status</label>
+        <choice value="*">All</choice>
+        <choice value="0">Enabled Only</choice>
+        <choice value="1">Disabled Only</choice>
+        <default>0</default>
+      </input>
+      <input type="dropdown" token="filter_app" searchWhenChanged="true">
+        <label>App</label>
+        <choice value="*">All Apps</choice>
+        <search>
+          <query>| inputlookup governance_search_cache.csv | stats count by app | fields app</query>
+        </search>
+        <fieldForLabel>app</fieldForLabel>
+        <fieldForValue>app</fieldForValue>
+        <default>*</default>
+      </input>
+      <input type="text" token="filter_owner" searchWhenChanged="true">
+        <label>Owner</label>
+        <default>*</default>
+      </input>
+      <table id="all_searches_table">
+        <search>
+          <query>| inputlookup governance_search_cache.csv
+| search app=$filter_app$ owner=$filter_owner$
+| lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status, remediation_deadline, flagged_by, flagged_time, reason as flag_reason
+| eval governance_status = case(
+    flag_status="disabled", "Disabled by Governance",
+    flag_status="notified", "Pending Remediation",
+    flag_status="pending", "Flagged",
+    is_suspicious=1, "Suspicious",
+    1=1, "OK")
+| eval days_remaining = if(isnotnull(remediation_deadline), round((remediation_deadline - now()) / 86400, 1), null())
+| eval is_flagged_search = if(flag_status="pending" OR flag_status="notified" OR flag_status="disabled", 1, 0)
+| eval is_expiring_soon = if(isnotnull(days_remaining) AND days_remaining >= 0 AND days_remaining &lt;= 3, 1, 0)
+| eval view_match = case(
+    "$view_filter$"="flagged", is_flagged_search,
+    "$view_filter$"="expiring", is_expiring_soon,
+    "$view_filter$"="suspicious", is_suspicious,
+    1=1, 1)
+| where view_match=1
+| eval status_filter_match = case(
+    "$view_filter$"="flagged", 1,
+    "$view_filter$"="expiring", 1,
+    "$filter_status$"="*", 1,
+    disabled=$filter_status$, 1,
+    1=1, 0)
+| where status_filter_match=1
+| eval flagged_date = if(isnotnull(flagged_time), strftime(flagged_time, "%Y-%m-%d"), "")
+| eval deadline_date = if(isnotnull(remediation_deadline), strftime(remediation_deadline, "%Y-%m-%d"), "")
+| eval sort_priority = case(
+    is_expiring_soon=1, 1,
+    is_flagged_search=1, 2,
+    is_suspicious=1, 3,
+    1=1, 4)
+| sort sort_priority, days_remaining, - runtime_ratio
+| eval status_icon = case(
+    governance_status="Disabled by Governance", "🚫 ",
+    governance_status="Pending Remediation", "⚠️ ",
+    governance_status="Flagged", "🚩 ",
+    governance_status="Suspicious", "⚡ ",
+    1=1, "")
+| eval display_name = status_icon . title
+| table display_name, governance_status, owner, app, cron_schedule, frequency_label, avg_runtime_display, run_count, runtime_ratio, svc_per_run, monthly_cost, days_remaining, flagged_by, flag_reason
+| rename display_name as "Search Name", governance_status as "Status", owner as "Owner", app as "App", cron_schedule as "Schedule", frequency_label as "Frequency", avg_runtime_display as "Avg Runtime", run_count as "Runs", runtime_ratio as "Runtime %", svc_per_run as "SVC/Run", monthly_cost as "Cost/Mo", days_remaining as "Days Left", flagged_by as "Flagged By", flag_reason as "Flag Reason"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <refresh>1m</refresh>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+        <option name="rowNumbers">true</option>
+        <option name="wrap">false</option>
+        <format type="color" field="Status">
+          <colorPalette type="map">{"OK":#53A051,"Suspicious":#F8BE34,"Flagged":#F1813F,"Pending Remediation":#DC4E41,"Disabled by Governance":#708794,"Enabled":#2EA043}</colorPalette>
+        </format>
+        <format type="color" field="Runtime %">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" midColor="#F8BE34" minColor="#53A051"></colorPalette>
+          <scale type="minMidMax" midValue="10"></scale>
+        </format>
+        <format type="color" field="Days Left">
+          <colorPalette type="minMidMax" maxColor="#53A051" midColor="#F8BE34" minColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax" minValue="0" midValue="3" maxValue="7"></scale>
+        </format>
+        <format type="number" field="Cost/Mo">
+          <option name="precision">2</option>
+          <option name="unit">$</option>
+        </format>
+      </table>
+      <html>
+        <div class="action-buttons" id="all-searches-actions">
+          <button class="btn btn-primary" id="flag-btn-2">Flag Selected</button>
+          <button class="btn" id="unflag-btn-2">Unflag Selected</button>
+          <button class="btn" id="preview-btn-2">Preview Impact</button>
+          <button class="btn" id="email-btn-2">Email Owner</button>
+          <button class="btn btn-warning" id="disable-expiring-btn">Disable Expiring Soon</button>
+          <button class="btn" style="background: #dc4e41; border-color: #dc4e41;" id="view-flagged-btn-2">View Flagged Modal</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+  <!-- Selected Search Details Panel -->
+  <row depends="$selected_search$">
+    <panel>
+      <title>Selected Search Details: $selected_search$</title>
+      <table>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches splunk_server=local
+| search title="$selected_search$"
+| rename eai:acl.owner as owner, eai:acl.app as app
+| table title, owner, app, cron_schedule, dispatch.earliest_time, dispatch.latest_time, next_scheduled_time, search
+| rename title as "Name", owner as "Owner", app as "App", cron_schedule as "Schedule", dispatch.earliest_time as "Earliest Time", dispatch.latest_time as "Latest Time", next_scheduled_time as "Next Run", search as "Search Query"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+      <html>
+        <div class="action-buttons" id="detail-actions">
+          <button class="btn btn-primary" id="flag-this-btn">Flag This Search</button>
+          <button class="btn" id="unflag-this-btn">Unflag This Search</button>
+          <button class="btn" id="preview-this-btn">Preview Impact</button>
+          <button class="btn" id="email-this-owner-btn">Email Owner</button>
+          <button class="btn" id="clear-selection-btn">Clear Selection</button>
+        </div>
+      </html>
+    </panel>
+  </row>
+
+</dashboard>
