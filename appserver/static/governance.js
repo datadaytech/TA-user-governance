@@ -1711,13 +1711,18 @@ require([
             // Remove any existing dropdown menu
             $('.status-dropdown-menu').remove();
 
-            // Check if we're in suspicious modal (unflagged searches)
+            // Check if we're in suspicious modal OR if the row is marked as suspicious (unflagged searches)
             var isSuspiciousModal = window.currentMetricType === 'suspicious';
+            var isSuspiciousRow = $wrapper.data('is-suspicious') === true || $wrapper.data('is-suspicious') === 'true';
+            var isSuspicious = isSuspiciousModal || isSuspiciousRow;
+
+            // Check if search is already flagged (OK/Suspicious statuses can only be flagged, others have full options)
+            var isUnflagged = currentStatus && (currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious');
 
             // Available status options based on context
             var statuses;
-            if (isSuspiciousModal) {
-                // Suspicious searches can only be flagged
+            if (isSuspicious || isUnflagged) {
+                // Suspicious/unflagged searches can only be flagged
                 statuses = [
                     { value: 'pending', label: 'Flag for Review', color: '#f8991d' }
                 ];
@@ -1757,7 +1762,12 @@ require([
             var searchName = $(this).data('search');
             var owner = $(this).data('owner') || 'unknown';
             var app = $(this).data('app') || 'unknown';
-            var isSuspicious = $(this).data('is-suspicious') === 'true';
+            var isSuspicious = $(this).data('is-suspicious') === 'true' || $(this).data('is-suspicious') === true;
+
+            // Also get parent wrapper's current status to check if unflagged
+            var $wrapper = $(this).closest('.status-dropdown-wrapper');
+            var currentStatus = $wrapper.data('current-status') || '';
+            var isUnflagged = currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious';
 
             // Close menu
             $('.status-dropdown-menu').remove();
@@ -1766,11 +1776,11 @@ require([
 
             var updateQuery;
 
-            if (isSuspicious && newStatus === 'pending') {
+            if ((isSuspicious || isUnflagged) && newStatus === 'pending') {
                 // For suspicious (unflagged) searches, we need to CREATE a new entry in the lookup
                 var now = Math.floor(Date.now() / 1000);
                 var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
-                var reason = "Flagged from Suspicious Searches panel";
+                var reason = "Suspicious pattern detected";
 
                 updateQuery = '| inputlookup flagged_searches_lookup ' +
                     '| append [| makeresults | eval search_name="' + escapeString(searchName) + '", ' +
@@ -1806,10 +1816,10 @@ require([
                     $wrapper.find('.status-badge').parent().html(getStatusBadges(newStatus) + '<span style="margin-left: 4px; font-size: 10px; opacity: 0.7;">▼</span>');
 
                     // Refresh dashboard to update counts
-                    if (newStatus === 'resolved' || isSuspicious) {
+                    if (newStatus === 'resolved' || isSuspicious || isUnflagged) {
                         refreshDashboard();
                         // Close modal since item should be gone from current view
-                        if (isSuspicious) {
+                        if (isSuspicious && !isUnflagged) {
                             setTimeout(function() {
                                 $('#metricPopupOverlay').removeClass('active');
                             }, 500);
@@ -1827,12 +1837,36 @@ require([
                 return;
             }
 
-            console.log('Flagging searches from metric popup:', selectedSearches);
+            // Filter out already flagged searches (pending, notified, disabled, review)
+            var unflaggedSearches = selectedSearches.filter(function(s) {
+                var status = (s.status || '').toLowerCase();
+                return status !== 'pending' && status !== 'notified' && status !== 'disabled' &&
+                       status !== 'review' && status !== 'flagged' &&
+                       status.indexOf('pending') === -1 && status.indexOf('disabled') === -1;
+            });
+
+            if (unflaggedSearches.length === 0) {
+                alert('All selected searches are already flagged.\n\nPlease select unflagged searches or use the Flagged view to manage existing flags.');
+                return;
+            }
+
+            // Warn if some were already flagged
+            if (unflaggedSearches.length < selectedSearches.length) {
+                var alreadyFlagged = selectedSearches.length - unflaggedSearches.length;
+                if (!confirm(alreadyFlagged + ' search(es) are already flagged and will be skipped.\n\nProceed to flag ' + unflaggedSearches.length + ' remaining search(es)?')) {
+                    return;
+                }
+            }
+
+            console.log('Flagging searches from metric popup:', unflaggedSearches);
 
             // Close metric popup
             $('#metricPopupOverlay').removeClass('active');
 
-            var reason = "Flagged from Suspicious Searches panel - potentially inefficient or wasteful search patterns detected";
+            // Use only unflagged searches from this point
+            selectedSearches = unflaggedSearches;
+
+            var reason = "Suspicious pattern detected";
             var remediationDays = CONFIG.remediationDays || 7;
             var now = Math.floor(Date.now() / 1000);
             var remediationDeadline = now + (remediationDays * 86400);
@@ -2859,27 +2893,47 @@ require([
             }
 
             function fallbackRestUpdate() {
-                // Use REST API directly
-                var endpoint = '/en-US/splunkd/__raw/servicesNS/' + encodeURIComponent(owner) + '/' + encodeURIComponent(app) + '/saved/searches/' + encodeURIComponent(searchName);
+                // Try multiple endpoint formats with different owner contexts
+                var contexts = [
+                    { owner: owner, app: app },
+                    { owner: 'nobody', app: app },
+                    { owner: '-', app: app }
+                ];
 
-                console.log("Trying REST endpoint:", endpoint);
-
-                $.ajax({
-                    url: endpoint,
-                    type: 'POST',
-                    data: {
-                        cron_schedule: newCron,
-                        output_mode: 'json'
-                    },
-                    success: function(response) {
-                        console.log("Cron schedule updated successfully via REST:", response);
-                        onUpdateSuccess();
-                    },
-                    error: function(xhr, status, error) {
-                        console.error("REST update failed:", xhr.status, xhr.responseText);
-                        alert("Failed to update schedule (Error " + xhr.status + "). Please update manually in Settings > Searches, Reports, and Alerts.");
+                function tryContext(ctxIndex) {
+                    if (ctxIndex >= contexts.length) {
+                        alert("Failed to update schedule. Please update manually in Settings > Searches, Reports, and Alerts.");
+                        return;
                     }
-                });
+
+                    var ctx = contexts[ctxIndex];
+                    // Try both endpoint formats
+                    var locale = window.location.pathname.match(/^\/([a-z]{2}-[A-Z]{2})\//);
+                    var localePrefix = locale ? '/' + locale[1] : '';
+                    var endpoint = localePrefix + '/splunkd/__raw/servicesNS/' + encodeURIComponent(ctx.owner) + '/' + encodeURIComponent(ctx.app) + '/saved/searches/' + encodeURIComponent(searchName);
+
+                    console.log("Trying REST endpoint:", endpoint, "context:", ctx);
+
+                    $.ajax({
+                        url: endpoint,
+                        type: 'POST',
+                        data: {
+                            cron_schedule: newCron,
+                            output_mode: 'json'
+                        },
+                        success: function(response) {
+                            console.log("Cron schedule updated successfully via REST:", response);
+                            onUpdateSuccess();
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("REST update failed:", xhr.status, xhr.responseText, "trying next context...");
+                            // Try next context
+                            tryContext(ctxIndex + 1);
+                        }
+                    });
+                }
+
+                tryContext(0);
             }
 
             function onUpdateSuccess() {
@@ -3465,7 +3519,7 @@ require([
                 searchQuery = '| inputlookup governance_search_cache.csv | where disabled="0" OR disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | eval status_display=if(isnotnull(flag_status), flag_status, "active") | table title, owner, app, status_display, frequency_label | head 50';
                 break;
             case 'suspicious':
-                searchQuery = '| inputlookup governance_search_cache.csv | where (disabled="0" OR disabled=0) AND is_suspicious=1 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | where isnull(flag_status) OR (flag_status!="pending" AND flag_status!="notified" AND flag_status!="disabled") | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason | head 50';
+                searchQuery = '| inputlookup governance_search_cache.csv | where (disabled="0" OR disabled=0) AND is_suspicious=1 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | where isnull(flag_status) OR flag_status="" | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason | head 50';
                 break;
             case 'flagged':
                 searchQuery = '| inputlookup flagged_searches_lookup | search status IN ("pending", "notified", "disabled", "review") | dedup search_name | eval status_display=status | eval deadline_epoch=remediation_deadline | eval days_remaining=round((remediation_deadline - now()) / 86400, 2) | table search_name, search_owner, search_app, status_display, reason, status, deadline_epoch, days_remaining | head 50';
@@ -3828,6 +3882,52 @@ require([
                         $searchNameCell.prepend(disabledHtml);
                     }
                     $row.addClass('row-disabled');
+                }
+
+                // Add blue lightning bolt for suspicious (unflagged) searches
+                var isSuspicious = false;
+                if (statusColIndex >= 0 && $cells.length > statusColIndex) {
+                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
+                    isSuspicious = (statusText === 'suspicious');
+                }
+
+                if (isSuspicious && !isFlagged && searchName) {
+                    var $searchNameCell = $cells.filter(function() {
+                        var cellText = $(this).text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓⚡🔴]+/, '').trim();
+                        return cellText === searchName;
+                    }).first();
+
+                    if (!$searchNameCell.length && searchNameColIndex >= 0) {
+                        $searchNameCell = $cells.eq(searchNameColIndex);
+                    }
+
+                    if ($searchNameCell.length && !$searchNameCell.find('.suspicious-indicator').length) {
+                        var suspiciousHtml = '<span class="suspicious-indicator" style="color: #17a2b8; margin-right: 6px; font-size: 12px;" title="Suspicious search pattern detected">⚡</span>';
+                        $searchNameCell.prepend(suspiciousHtml);
+                    }
+                    $row.addClass('row-suspicious');
+                }
+
+                // Make status column interactive with dropdown (like modal)
+                if (statusColIndex >= 0 && $cells.length > statusColIndex) {
+                    var $statusCell = $cells.eq(statusColIndex);
+                    var currentStatus = $statusCell.text().trim();
+
+                    // Only add dropdown if not already enhanced
+                    if (!$statusCell.find('.status-dropdown-wrapper').length && currentStatus) {
+                        var statusBadge = getStatusBadges(currentStatus);
+                        var dropdownHtml = '<div class="status-dropdown-wrapper" ' +
+                            'data-search="' + escapeHtml(searchName) + '" ' +
+                            'data-owner="' + escapeHtml(owner) + '" ' +
+                            'data-app="' + escapeHtml(app) + '" ' +
+                            'data-current-status="' + escapeHtml(currentStatus) + '" ' +
+                            'data-is-suspicious="' + isSuspicious + '" ' +
+                            'style="cursor: pointer; position: relative; display: inline-block;" title="Click to change status">' +
+                            statusBadge +
+                            '<span style="margin-left: 4px; font-size: 10px; opacity: 0.7;">▼</span>' +
+                            '</div>';
+                        $statusCell.html(dropdownHtml);
+                    }
                 }
 
                 // Enhance schedule column with cron clickable
