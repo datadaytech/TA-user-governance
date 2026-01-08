@@ -42,13 +42,8 @@
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
-        <option name="drilldown">all</option>
+        <option name="drilldown">none</option>
         <option name="useColors">0</option>
-        <drilldown>
-          <set token="metric_popup_type">total</set>
-          <set token="metric_popup_value">$click.value$</set>
-          <set token="metric_popup_title">Total Scheduled Searches</set>
-        </drilldown>
       </single>
     </panel>
     <panel id="suspicious_metric_panel">

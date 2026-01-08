@@ -25,6 +25,71 @@ require([
         remediationDays: 7
     };
 
+    // Funny encouraging messages for when there are 0 items (rotates on each click)
+    var zeroItemMessages = [
+        "Zero problems? You're basically a search governance superhero. 🦸",
+        "Nothing to see here. Your searches are so clean they squeak.",
+        "Wow, 0 items. Did you bribe the search scheduler?",
+        "All clear! Your Splunk instance just gave you a standing ovation. 👏",
+        "Empty list = happy admin. This is the way.",
+        "No issues found. Go grab a coffee, you've earned it. ☕",
+        "Look at you, running a tight ship! Captain Governance over here.",
+        "Zero flags. Either you're great at this or the searches are hiding. 👀",
+        "Nothing here but tumbleweeds and excellence. 🌵",
+        "Congrats! Your searches are more organized than my sock drawer.",
+        "Achievement unlocked: Perfect Governance! Now go home early.",
+        "No problematic searches? Are you even using Splunk? 😏",
+        "This is cleaner than my production code. Impressive.",
+        "0 items. The auditors will be disappointed they can't yell at anyone.",
+        "Your governance game is stronger than my coffee. And I like strong coffee.",
+        "Nothing to flag means nothing to drag. Well done!",
+        "Zero issues. You're making the rest of us look bad. Stop it. 😤",
+        "All clear! The search police have left the building.",
+        "No items found. Did you just flex on the entire SOC team?",
+        "Your searches are so well-behaved they deserve a treat. 🍪",
+        "Absolutely nothing wrong. Are you a wizard? 🧙‍♂️",
+        "Zero problems detected. The universe is in balance.",
+        "Empty list. Time to update your resume with 'Governance Master'.",
+        "Nothing here! Your future self thanks your past self.",
+        "Clean slate! This is what peak performance looks like.",
+        "No flags, no worries. Living the admin dream!",
+        "Zero items. You've achieved what others only dream of.",
+        "This list is emptier than my bank account after Black Friday. 👌",
+        "Flawless execution. Someone give this person a raise!",
+        "Nothing to report. Go touch some grass, you've earned it. 🌿",
+        "0 issues. The compliance team just shed a tear of joy.",
+        "All systems nominal. Houston, we DON'T have a problem.",
+        "No items? Check again. Just kidding, you're actually perfect.",
+        "Your governance is tighter than my deadline schedules. Respect.",
+        "Empty. Clean. Beautiful. Just like my code after review. Just kidding.",
+        "Zero flags means zero drama. That's a W in my book. 📚",
+        "Nothing to see here, folks. Move along to the coffee machine.",
+        "You've got fewer problems than a hello world program.",
+        "This is so clean I could eat off it. But I won't. That's weird.",
+        "No items found. Did you sacrifice a goat to the search gods?",
+        "Your Splunk hygiene is immaculate. Someone's been flossing!",
+        "Zero issues. You're the Marie Kondo of scheduled searches.",
+        "Nothing problematic here. What's your secret? Asking for a friend.",
+        "All clear! Time to add 'Search Whisperer' to your LinkedIn.",
+        "No items. The only thing flagged here is your awesomeness. 🚩✨",
+        "Empty list energy. I respect it.",
+        "Zero findings. The pen testers are jealous.",
+        "Your governance is chef's kiss. 👨‍🍳💋",
+        "Nothing here but clean data and good vibes.",
+        "0 items. Somewhere, a compliance officer is smiling."
+    ];
+    var lastZeroMessageIndex = -1;
+
+    // Get a random encouraging message (never repeats consecutively)
+    function getZeroItemMessage() {
+        var newIndex;
+        do {
+            newIndex = Math.floor(Math.random() * zeroItemMessages.length);
+        } while (newIndex === lastZeroMessageIndex && zeroItemMessages.length > 1);
+        lastZeroMessageIndex = newIndex;
+        return zeroItemMessages[newIndex];
+    }
+
     // Get current user
     var currentUser = "admin";
     try {
@@ -79,6 +144,40 @@ require([
             .replace(/'/g, '&#39;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+    }
+
+    // Fetch last governance action via REST API (fallback)
+    function fetchLastGovernanceAction() {
+        var localePrefix = '';
+        var pathParts = window.location.pathname.split('/');
+        if (pathParts.length > 1 && pathParts[1].match(/^[a-z]{2}(-[A-Z]{2})?$/)) {
+            localePrefix = '/' + pathParts[1];
+        }
+
+        $.ajax({
+            url: localePrefix + '/splunkd/__raw/services/search/jobs',
+            type: 'POST',
+            data: {
+                search: '| inputlookup governance_audit_log.csv | sort - timestamp | head 1 | eval display = strftime(timestamp, "%Y-%m-%d %H:%M:%S") . " - " . action . " by " . performed_by | table display',
+                exec_mode: 'oneshot',
+                output_mode: 'json'
+            },
+            success: function(response) {
+                if (response && response.results && response.results.length > 0) {
+                    var display = response.results[0].display;
+                    if (display) {
+                        $('#lastActionTimestamp').text(display);
+                    } else {
+                        $('#lastActionTimestamp').text('No actions recorded');
+                    }
+                } else {
+                    $('#lastActionTimestamp').text('No actions recorded');
+                }
+            },
+            error: function() {
+                $('#lastActionTimestamp').text('No actions recorded');
+            }
+        });
     }
 
     // Format countdown timer display from deadline epoch
@@ -365,12 +464,12 @@ require([
         };
 
         // Determine which badges to show
-        if (statusLower === 'disabled') {
+        if (statusLower === 'disabled' || statusLower === 'disabled by governance') {
             badges.push('<span class="status-badge disabled" style="' + badgeStyles.disabled + '">DISABLED</span>');
         } else if (statusLower === 'pending' || statusLower === 'flagged') {
             badges.push('<span class="status-badge flagged" style="' + badgeStyles.pending + '">FLAGGED</span>');
-        } else if (statusLower === 'notified') {
-            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">NOTIFIED</span>');
+        } else if (statusLower === 'notified' || statusLower === 'pending remediation') {
+            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">PENDING</span>');
         } else if (statusLower === 'enabled') {
             badges.push('<span class="status-badge enabled" style="' + badgeStyles.enabled + '">ENABLED</span>');
         } else if (statusLower === 'expiring') {
@@ -379,8 +478,10 @@ require([
             badges.push('<span class="status-badge suspicious" style="' + badgeStyles.suspicious + '">SUSPICIOUS</span>');
         } else if (statusLower === 'active') {
             badges.push('<span class="status-badge active" style="' + badgeStyles.active + '">ACTIVE</span>');
-        } else if (statusLower === 'review') {
+        } else if (statusLower === 'review' || statusLower === 'pending review') {
             badges.push('<span class="status-badge review" style="' + badgeStyles.review + '">📋 PENDING REVIEW</span>');
+        } else if (statusLower === 'ok' || statusLower === 'resolved') {
+            badges.push('<span class="status-badge ok" style="background: #2ecc71; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">OK</span>');
         } else {
             badges.push('<span class="status-badge" style="background: #666; color: #fff; padding: 2px 8px; border-radius: 3px; font-size: 11px;">' + escapeHtml(status || '-') + '</span>');
         }
@@ -1598,30 +1699,30 @@ require([
     // Reason Details Modal - shows why a search was flagged and solutions
     var reasonModalHtml =
         '<div class="cron-modal-overlay" id="reasonModalOverlay">' +
-            '<div class="cron-modal" style="max-width: 650px;">' +
-                '<div class="cron-modal-header" style="background: linear-gradient(90deg, rgba(248, 190, 52, 0.15) 0%, transparent 100%);">' +
-                    '<h2 style="color: #f8be34;"><span style="margin-right: 8px;">⚠️</span>Suspicious Search Details</h2>' +
+            '<div class="cron-modal" style="max-width: 600px;">' +
+                '<div class="cron-modal-header" style="background: linear-gradient(135deg, rgba(248, 190, 52, 0.2) 0%, rgba(241, 129, 63, 0.1) 100%); border-bottom: 2px solid #f8be34;">' +
+                    '<h2 style="color: #fff; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-size: 22px;">⚡</span>Suspicious Search</h2>' +
                     '<button class="cron-modal-close" id="reasonModalClose">&times;</button>' +
                 '</div>' +
-                '<div class="cron-modal-body" style="padding: 20px;">' +
+                '<div class="cron-modal-body" style="padding: 24px;">' +
                     '<div id="reasonModalContent">' +
-                        '<div class="reason-section" style="margin-bottom: 20px;">' +
-                            '<div class="reason-label" style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Search Name</div>' +
-                            '<div id="reasonSearchName" style="color: #ffffff; font-size: 14px; font-weight: 500; word-break: break-word;"></div>' +
+                        '<div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">' +
+                            '<div style="color: #00d4ff; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Search Name</div>' +
+                            '<div id="reasonSearchName" style="color: #fff; font-size: 15px; font-weight: 500; word-break: break-word;"></div>' +
                         '</div>' +
-                        '<div class="reason-section" style="margin-bottom: 20px;">' +
-                            '<div class="reason-label" style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Why It Was Flagged</div>' +
-                            '<div id="reasonDescription" style="background: rgba(248, 190, 52, 0.1); border: 1px solid rgba(248, 190, 52, 0.3); border-radius: 8px; padding: 15px; color: #f8be34;"></div>' +
+                        '<div style="background: linear-gradient(135deg, rgba(248, 190, 52, 0.15) 0%, rgba(248, 190, 52, 0.05) 100%); border-left: 4px solid #f8be34; border-radius: 0 8px 8px 0; padding: 16px; margin-bottom: 20px;">' +
+                            '<div style="color: #f8be34; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;"><span>⚠</span> Issue Detected</div>' +
+                            '<div id="reasonDescription" style="color: #fff; font-size: 14px; line-height: 1.5;"></div>' +
                         '</div>' +
-                        '<div class="reason-section">' +
-                            '<div class="reason-label" style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Recommended Solutions</div>' +
-                            '<div id="reasonSolutions" style="background: rgba(46, 204, 113, 0.1); border: 1px solid rgba(46, 204, 113, 0.3); border-radius: 8px; padding: 15px;"></div>' +
+                        '<div style="background: linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(46, 204, 113, 0.05) 100%); border-left: 4px solid #2ecc71; border-radius: 0 8px 8px 0; padding: 16px;">' +
+                            '<div style="color: #2ecc71; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;"><span>💡</span> How to Fix</div>' +
+                            '<div id="reasonSolutions" style="color: rgba(255,255,255,0.9); font-size: 13px; line-height: 1.6;"></div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div class="cron-modal-footer">' +
+                '<div class="cron-modal-footer" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1);">' +
                     '<button class="btn btn-secondary" id="reasonModalCancel">Close</button>' +
-                    '<button class="btn" style="background: #53a051; border-color: #53a051; color: white;" id="reasonModalResolve">Mark as Resolved</button>' +
+                    '<button class="btn" style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); border: none; color: white; font-weight: 500;" id="reasonModalResolve">✓ Mark Resolved</button>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -1802,18 +1903,30 @@ require([
         }
         window.closeMetricPopup = closeMetricPopup;
 
-        // Metric popup row click handler - no longer toggles checkbox, just visual feedback
+        // Metric popup row click handler - toggle selection for bulk actions
         $(document).on('click', '.metric-popup-row td', function(e) {
             // Don't process if clicking on status dropdown
             if ($(e.target).closest('.status-dropdown-wrapper').length > 0) {
                 return;
             }
-            // Visual feedback only - status changes via dropdown
+            // Toggle selected state on click
             var $row = $(this).closest('tr');
-            $row.css('background-color', 'rgba(255,255,255,0.1)');
-            setTimeout(function() {
-                $row.css('background-color', '');
-            }, 200);
+            $row.toggleClass('selected');
+
+            // Update selection count display
+            var selectedCount = $('.metric-popup-row.selected').length;
+            var $footer = $('#metricPopupOverlay .metric-popup-footer');
+            var $countDisplay = $footer.find('.selection-count');
+
+            if (selectedCount > 0) {
+                if ($countDisplay.length === 0) {
+                    $footer.prepend('<span class="selection-count" style="color: #00d4ff; font-weight: 600; padding: 8px 12px; background: rgba(0,212,255,0.1); border-radius: 4px; margin-right: auto;">' + selectedCount + ' selected</span>');
+                } else {
+                    $countDisplay.text(selectedCount + ' selected');
+                }
+            } else {
+                $countDisplay.remove();
+            }
         });
 
         // Status dropdown click handler - show status change menu
@@ -2809,7 +2922,7 @@ require([
 
         function getSelectedMetricSearches() {
             var selected = [];
-            $('.metric-row-checkbox:checked').each(function() {
+            $('.metric-popup-row.selected').each(function() {
                 var index = parseInt($(this).attr('data-index'));
                 if (currentMetricSearches[index]) {
                     selected.push(currentMetricSearches[index]);
@@ -2841,12 +2954,28 @@ require([
 
             // Watch for last action display token
             defaultTokens.on('change:last_action_display', function(model, value) {
-                if (value) {
+                // Check for valid value (not empty, null, or unexpanded token)
+                if (value && !value.includes('$result.') && value !== 'null') {
                     $('#lastActionTimestamp').text(value);
                 } else {
-                    $('#lastActionTimestamp').text('No actions recorded');
+                    // Token didn't expand properly - try fallback
+                    fetchLastGovernanceAction();
                 }
             });
+
+            // Also check the token value immediately (in case it was already set)
+            var existingLastAction = defaultTokens.get('last_action_display');
+            if (existingLastAction && !existingLastAction.includes('$result.') && existingLastAction !== 'null') {
+                $('#lastActionTimestamp').text(existingLastAction);
+            }
+
+            // Fallback: fetch last action directly via REST after a delay
+            setTimeout(function() {
+                var currentText = $('#lastActionTimestamp').text();
+                if (currentText === 'Loading...' || currentText.includes('$result.') || currentText === '$result.display$') {
+                    fetchLastGovernanceAction();
+                }
+            }, 3000);
 
             // Watch for metric popup token (old format)
             defaultTokens.on('change:show_metric_popup', function(model, value) {
@@ -3301,33 +3430,49 @@ require([
         var lowerReason = (reason || '').toLowerCase();
 
         if (lowerReason.indexOf('high runtime') > -1 || lowerReason.indexOf('runtime ratio') > -1 || lowerReason.indexOf('excessive runtime') > -1) {
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Optimize the search query:</strong> Use more specific index filters (e.g., <code>index=specific_index</code>) instead of wildcards</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Reduce time range:</strong> Narrow the <code>earliest_time</code> and <code>latest_time</code> parameters</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Add field extraction efficiency:</strong> Use <code>tstats</code> or summary indexes for high-volume searches</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Run less frequently:</strong> Consider changing from every 5 min to hourly or daily</li>');
+            solutions.push('<li><strong>Replace with tstats:</strong> <code>| tstats count WHERE index=* BY host</code> is 10-100x faster than stats</li>');
+            solutions.push('<li><strong>Add early filters:</strong> Move <code>WHERE</code> clauses before <code>stats</code> - filter first, aggregate second</li>');
+            solutions.push('<li><strong>Use summary indexing:</strong> Pre-aggregate with <code>collect</code> or <code>mcollect</code> for repeated queries</li>');
+            solutions.push('<li><strong>Limit fields:</strong> Add <code>| fields field1, field2</code> early to reduce memory usage</li>');
+            solutions.push('<li><strong>Reduce time range:</strong> Change from 24h to 1h if fresher data works for your use case</li>');
         } else if (lowerReason.indexOf('frequent') > -1 || lowerReason.indexOf('runs every') > -1 || lowerReason.indexOf('schedule') > -1) {
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Reduce frequency:</strong> Change from every minute/5 minutes to every 15 minutes or hourly</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Use data model acceleration:</strong> Pre-summarize data to reduce query time</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Batch processing:</strong> Run during off-peak hours if real-time data is not required</li>');
+            solutions.push('<li><strong>Batch it:</strong> Change from */5 to */15 or 0 * * * * (hourly) - most alerts don\'t need 5-min granularity</li>');
+            solutions.push('<li><strong>Use real-time alerts:</strong> For true urgency, use real-time search instead of frequent scheduled</li>');
+            solutions.push('<li><strong>Stagger execution:</strong> Change <code>*/5 * * * *</code> to <code>3,8,13,18... * * * *</code> to spread load</li>');
+            solutions.push('<li><strong>Enable acceleration:</strong> For reports, enable Report Acceleration in Settings > Searches</li>');
         } else if (lowerReason.indexOf('wildcard') > -1 || lowerReason.indexOf('all index') > -1 || lowerReason.indexOf('index=*') > -1) {
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Specify indexes:</strong> Replace <code>index=*</code> with specific indexes like <code>index=main OR index=security</code></li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Use search-time field extraction:</strong> Filter early with <code>| fields</code> to reduce data processed</li>');
+            solutions.push('<li><strong>Target specific indexes:</strong> Replace <code>index=*</code> with <code>index=main index=security</code></li>');
+            solutions.push('<li><strong>Use index prefixes:</strong> <code>index=prod_*</code> is faster than <code>index=*</code></li>');
+            solutions.push('<li><strong>Add sourcetype filter:</strong> <code>sourcetype=access_log</code> reduces search scope significantly</li>');
+            solutions.push('<li><strong>Create a data model:</strong> For repeated queries, accelerated data models are much faster</li>');
         } else if (lowerReason.indexOf('expensive') > -1 || lowerReason.indexOf('cost') > -1 || lowerReason.indexOf('resource') > -1) {
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Review search complexity:</strong> Simplify joins, subsearches, and stats commands</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Consider acceleration:</strong> Enable report acceleration if this is a frequently-run report</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Archive or disable:</strong> If no longer needed, disable or delete the search</li>');
+            solutions.push('<li><strong>Simplify subsearches:</strong> Replace <code>[search ...]</code> with lookups or append where possible</li>');
+            solutions.push('<li><strong>Avoid eval in stats:</strong> Pre-calculate eval fields before <code>| stats</code></li>');
+            solutions.push('<li><strong>Use dedup wisely:</strong> <code>dedup 10 host</code> is faster than <code>dedup host</code></li>');
+            solutions.push('<li><strong>Consider archival:</strong> If data is rarely accessed, move to frozen tier</li>');
         } else if (lowerReason.indexOf('owner') > -1 || lowerReason.indexOf('orphan') > -1 || lowerReason.indexOf('unknown') > -1) {
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Reassign ownership:</strong> Transfer search to an active user or service account</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Review necessity:</strong> Determine if the search is still needed</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Document purpose:</strong> Add a description explaining the search\'s business value</li>');
+            solutions.push('<li><strong>Transfer ownership:</strong> In Settings > Searches, change owner to active user or splunk-system-user</li>');
+            solutions.push('<li><strong>Document purpose:</strong> Add description field explaining what this search does and why</li>');
+            solutions.push('<li><strong>Set up alerts:</strong> Configure email alerts so someone is notified if it fails</li>');
+            solutions.push('<li><strong>Consider deletion:</strong> If no one claims it after 30 days, it may be safe to disable</li>');
+        } else if (lowerReason.indexOf('transaction') > -1 || lowerReason.indexOf('join') > -1) {
+            solutions.push('<li><strong>Replace transaction:</strong> Use <code>stats values() BY</code> instead - 5-10x faster</li>');
+            solutions.push('<li><strong>Replace join:</strong> Use <code>| append</code> + <code>| stats</code> or lookups instead</li>');
+            solutions.push('<li><strong>Limit transaction scope:</strong> Add <code>maxspan=1h</code> and <code>maxevents=1000</code></li>');
+            solutions.push('<li><strong>Pre-aggregate:</strong> Create a summary index with the grouped data</li>');
         } else {
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Review search requirements:</strong> Confirm this search is still needed for business operations</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Optimize schedule:</strong> Consider running during off-peak hours</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Add documentation:</strong> Update the search description with its purpose and owner contact</li>');
-            solutions.push('<li style="margin-bottom: 8px;"><strong>Flag for review:</strong> Mark as reviewed if the search is operating as expected</li>');
+            solutions.push('<li><strong>Validate business need:</strong> Confirm with stakeholders if this search is still required</li>');
+            solutions.push('<li><strong>Schedule off-peak:</strong> Move to run at 2-5 AM local time when cluster is less busy</li>');
+            solutions.push('<li><strong>Add monitoring:</strong> Set up job inspector alerts for searches exceeding 5 min runtime</li>');
+            solutions.push('<li><strong>Document:</strong> Add a description explaining purpose, owner contact, and SLA requirements</li>');
         }
 
-        return '<ul style="margin: 0; padding-left: 20px; color: #2ecc71;">' + solutions.join('') + '</ul>';
+        var html = '<ul style="margin: 0; padding-left: 0; list-style: none;">';
+        solutions.forEach(function(sol, idx) {
+            html += '<li style="padding: 10px 12px; margin-bottom: 8px; background: rgba(46, 204, 113, 0.08); border-radius: 6px; border-left: 3px solid #2ecc71; font-size: 13px; line-height: 1.5;">' + sol.replace('<li>', '').replace('</li>', '') + '</li>';
+        });
+        html += '</ul>';
+        return html;
     }
 
     // Open the reason details modal
@@ -3337,7 +3482,9 @@ require([
         $('#reasonSearchName').text(searchName || 'Unknown');
 
         if (reason && reason.trim()) {
-            $('#reasonDescription').html('<p style="margin: 0;">' + escapeHtml(reason) + '</p>');
+            // Format the reason more descriptively
+            var formattedReason = formatReasonDescription(reason);
+            $('#reasonDescription').html(formattedReason);
         } else {
             $('#reasonDescription').html('<p style="margin: 0; color: rgba(255,255,255,0.6);">No specific reason recorded. This search may have been flagged manually or detected as suspicious by an automated rule.</p>');
         }
@@ -3345,6 +3492,61 @@ require([
         $('#reasonSolutions').html(getReasonSolutions(reason));
 
         $('#reasonModalOverlay').addClass('active');
+    }
+
+    // Format the reason with more descriptive context
+    function formatReasonDescription(reason) {
+        if (!reason) return '';
+
+        var lowerReason = reason.toLowerCase();
+        var icon = '⚠️';
+        var category = 'Performance Issue';
+        var impact = '';
+
+        // Determine icon and category based on reason
+        if (lowerReason.indexOf('join') > -1 || lowerReason.indexOf('transaction') > -1) {
+            icon = '🔗';
+            category = 'Expensive Command';
+            impact = 'Join and transaction commands are memory-intensive and can cause indexer slowdowns during peak hours.';
+        } else if (lowerReason.indexOf('runtime') > -1 || lowerReason.indexOf('exceeds') > -1) {
+            icon = '⏱️';
+            category = 'High Runtime';
+            impact = 'Search runs longer than its schedule allows, potentially causing overlapping executions and queue buildup.';
+        } else if (lowerReason.indexOf('every 5 min') > -1 || lowerReason.indexOf('frequency') > -1 || lowerReason.indexOf('frequent') > -1) {
+            icon = '🔄';
+            category = 'High Frequency';
+            impact = 'Running every 5 minutes or less creates significant load. Consider if this frequency is truly necessary.';
+        } else if (lowerReason.indexOf('wildcard') > -1 || lowerReason.indexOf('index=*') > -1) {
+            icon = '🔍';
+            category = 'Broad Search Scope';
+            impact = 'Searching all indexes scans massive amounts of data. Targeting specific indexes can improve performance 10x.';
+        } else if (lowerReason.indexOf('expensive') > -1 || lowerReason.indexOf('cost') > -1) {
+            icon = '💰';
+            category = 'Resource Cost';
+            impact = 'This search consumes significant computing resources that could affect other users and searches.';
+        } else if (lowerReason.indexOf('owner') > -1 || lowerReason.indexOf('orphan') > -1) {
+            icon = '👤';
+            category = 'Ownership Issue';
+            impact = 'The search owner may no longer be active. This creates risk if the search fails with no one to respond.';
+        }
+
+        var html = '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+            '<div style="display: flex; align-items: center; gap: 10px;">' +
+                '<span style="font-size: 24px;">' + icon + '</span>' +
+                '<div>' +
+                    '<div style="color: #f8be34; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">' + category + '</div>' +
+                    '<div style="color: #fff; font-size: 15px; font-weight: 500;">' + escapeHtml(reason) + '</div>' +
+                '</div>' +
+            '</div>';
+
+        if (impact) {
+            html += '<div style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px 12px; color: rgba(255,255,255,0.8); font-size: 13px; line-height: 1.5;">' +
+                '<strong style="color: #f8be34;">Impact:</strong> ' + impact +
+            '</div>';
+        }
+
+        html += '</div>';
+        return html;
     }
 
     // Show search query preview modal - fetches the actual search SPL from REST API
@@ -3391,26 +3593,28 @@ require([
         });
     }
 
-    // Format SPL query with basic syntax highlighting
+    // Format SPL query with pipe formatting (simplified to avoid cascading issues)
     function formatSplunkQuery(query) {
         if (!query) return '';
 
-        // Escape HTML first
+        // First escape HTML to prevent XSS
         var escaped = escapeHtml(query);
 
-        // Highlight Splunk commands (starts with |)
-        escaped = escaped.replace(/\|\s*(\w+)/g, '<span style="color: #00d4ff;">| $1</span>');
+        // Split by pipe character and format each command on a new line
+        // Only colorize the pipe character to avoid cascading regex issues
+        var parts = escaped.split(/\s*\|\s*/);
+        var formattedLines = [];
 
-        // Highlight field=value pairs
-        escaped = escaped.replace(/(\w+)=/g, '<span style="color: #f8be34;">$1</span>=');
+        parts.forEach(function(part, idx) {
+            if (idx === 0 && part.trim()) {
+                formattedLines.push(part);
+            } else if (part.trim()) {
+                // Only highlight the pipe, leave the rest as plain text
+                formattedLines.push('<span style="color: #00d4ff; font-weight: bold;">|</span> ' + part);
+            }
+        });
 
-        // Highlight quoted strings
-        escaped = escaped.replace(/"([^"]+)"/g, '<span style="color: #53a051;">"$1"</span>');
-
-        // Highlight numbers
-        escaped = escaped.replace(/\b(\d+)\b/g, '<span style="color: #ff7b72;">$1</span>');
-
-        return escaped;
+        return formattedLines.join('\n');
     }
 
     function openCronModal(searchName, cronSchedule, owner, app) {
@@ -3782,6 +3986,23 @@ require([
 
         $('#metricPopupValue').text(value);
         $('#metricPopupTitle').text(title);
+
+        // If value is 0, show funny message immediately without loading
+        if (value === '0' || value === 0 || parseInt(value) === 0) {
+            var colCount = (metricType === 'flagged' || metricType === 'expiring') ? 7 : 6;
+            var funnyMessage = getZeroItemMessage();
+            if (metricType === 'flagged' || metricType === 'expiring') {
+                $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            } else {
+                $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            }
+            $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: #5cc05c; padding: 30px; font-size: 14px;"><div style="font-size: 36px; margin-bottom: 10px;">🎉</div>' + funnyMessage + '</td></tr>');
+            $('#metricPopupOverlay').addClass('active');
+            window.currentMetricType = metricType;
+            updateMetricTypeButtons(metricType);
+            return; // Skip the search since there's nothing to load
+        }
+
         // Add "Time Remaining" column for flagged/expiring metrics
         if (metricType === 'flagged' || metricType === 'expiring') {
             $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
@@ -3841,7 +4062,8 @@ require([
 
                     var colCount = (metricType === 'flagged' || metricType === 'expiring') ? 7 : 6;
                     if (!rows || rows.length === 0) {
-                        $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No items found</td></tr>');
+                        var funnyMessage = getZeroItemMessage();
+                        $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: #5cc05c; padding: 30px; font-size: 14px;"><div style="font-size: 36px; margin-bottom: 10px;">🎉</div>' + funnyMessage + '</td></tr>');
                         return;
                     }
 

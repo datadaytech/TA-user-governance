@@ -112,9 +112,9 @@ body.theme-dark .dashboard-body {
 
 /* Metric-specific color enhancements - using solid colors for better visibility */
 #total_metric_panel .single-result {
-    color: #00d4ff !important;
-    -webkit-text-fill-color: #00d4ff !important;
-    text-shadow: 0 0 30px rgba(0, 212, 255, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 #suspicious_metric_panel .single-result {
@@ -1533,7 +1533,17 @@ tr:has(.gov-checkbox:checked) td {
 }
 
 .metric-popup-row.selected {
-    background: rgba(0, 212, 255, 0.15);
+    background: rgba(0, 212, 255, 0.2) !important;
+    border-left: 3px solid #00d4ff !important;
+}
+
+.metric-popup-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+}
+
+.metric-popup-row.selected:hover {
+    background: rgba(0, 212, 255, 0.25) !important;
 }
 
 /* ============================================
