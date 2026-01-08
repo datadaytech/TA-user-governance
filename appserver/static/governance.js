@@ -197,8 +197,14 @@ require([
             return '<span class="countdown-review" style="color: #6f42c1; font-weight: 600;">⏸️ Under Review</span>';
         }
 
-        // If status is not a flagged status (pending, notified), show N/A
-        if (status && status !== 'pending' && status !== 'notified' && status !== 'flagged' && status !== 'expiring') {
+        // If flagged (but not yet notified), show awaiting notification - NO timer yet
+        // Timer only starts when admin sends notification (status changes to 'notified')
+        if (status === 'flagged' || status === 'pending') {
+            return '<span class="countdown-awaiting" style="color: #f1813f; font-weight: 500;">⏸ Awaiting Notification</span>';
+        }
+
+        // If status is not notified or expiring, show N/A
+        if (status && status !== 'notified' && status !== 'expiring') {
             return '<span class="countdown-inactive" style="color: rgba(255,255,255,0.4);">N/A</span>';
         }
 
@@ -466,10 +472,10 @@ require([
         // Determine which badges to show
         if (statusLower === 'disabled' || statusLower === 'disabled by governance') {
             badges.push('<span class="status-badge disabled" style="' + badgeStyles.disabled + '">DISABLED</span>');
-        } else if (statusLower === 'pending' || statusLower === 'flagged') {
-            badges.push('<span class="status-badge flagged" style="' + badgeStyles.pending + '">FLAGGED</span>');
+        } else if (statusLower === 'flagged' || statusLower === 'pending') {
+            badges.push('<span class="status-badge flagged" style="' + badgeStyles.flagged + '">FLAGGED</span>');
         } else if (statusLower === 'notified' || statusLower === 'pending remediation') {
-            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">PENDING</span>');
+            badges.push('<span class="status-badge notified" style="' + badgeStyles.notified + '">NOTIFIED</span>');
         } else if (statusLower === 'enabled') {
             badges.push('<span class="status-badge enabled" style="' + badgeStyles.enabled + '">ENABLED</span>');
         } else if (statusLower === 'expiring') {
@@ -668,7 +674,8 @@ require([
         console.log("flagSearch called:", searchName, owner, app, reason);
 
         var now = Math.floor(Date.now() / 1000);
-        var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
+        // NOTE: deadline is 0 until admin sends notification (then it gets set)
+        // This separates "flagged" (identified) from "notified" (timer started)
 
         // Build query that removes existing entry first, then adds new one (prevents duplicates)
         var searchQuery = '| inputlookup flagged_searches_lookup ' +
@@ -681,8 +688,8 @@ require([
             ', flagged_time=' + now +
             ', notification_sent=0' +
             ', notification_time=0' +
-            ', remediation_deadline=' + deadline +
-            ', status="pending"' +
+            ', remediation_deadline=0' +
+            ', status="flagged"' +
             ', reason="' + escapeString(reason) + '"' +
             ', notes=""]' +
             '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes' +
@@ -808,7 +815,8 @@ require([
         showToast("Flagging " + searches.length + " search" + (searches.length > 1 ? "es" : "") + "...");
 
         var now = Math.floor(Date.now() / 1000);
-        var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
+        // NOTE: deadline is 0 until admin sends notification (then it gets set)
+        // This separates "flagged" (identified) from "notified" (timer started)
 
         // Build append parts - each entry in its own subsearch to properly union results
         var appendParts = searches.map(function(s, idx) {
@@ -820,8 +828,8 @@ require([
                 ', flagged_time=' + now +
                 ', notification_sent=0' +
                 ', notification_time=0' +
-                ', remediation_deadline=' + deadline +
-                ', status="pending"' +
+                ', remediation_deadline=0' +
+                ', status="flagged"' +
                 ', reason="' + escapeString(s.reason || 'Manually flagged by administrator') + '"' +
                 ', notes=""]';
         });
@@ -1688,6 +1696,7 @@ require([
                     '<button class="btn" style="background: #f8be34; border-color: #f8be34; color: #000; display: none;" id="metricPopupReject">✗ Reject Review</button>' +
                     '<button class="btn" style="background: #5cc05c; border-color: #5cc05c; color: white; display: none;" id="metricPopupEnable">Enable Selected</button>' +
                     '<button class="btn" style="background: #f0ad4e; border-color: #f0ad4e; color: #000; display: none;" id="metricPopupFlag">🚩 Flag Selected</button>' +
+                    '<button class="btn" style="background: #007bff; border-color: #007bff; color: white; display: none;" id="metricPopupNotify">📧 Notify User</button>' +
                     '<button class="btn" style="background: #17a2b8; border-color: #17a2b8; color: white; display: none;" id="metricPopupUnflag">✓ Unflag Selected</button>' +
                     '<button class="btn" style="background: #dc4e41; border-color: #dc4e41; color: white;" id="metricPopupDisable">Disable Selected</button>' +
                     '<button class="btn btn-primary" id="metricPopupExtend">Extend Deadline</button>' +
@@ -1723,6 +1732,38 @@ require([
                 '<div class="cron-modal-footer" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1);">' +
                     '<button class="btn btn-secondary" id="reasonModalCancel">Close</button>' +
                     '<button class="btn" style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); border: none; color: white; font-weight: 500;" id="reasonModalResolve">✓ Mark Resolved</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+    // OK (Whitelist) Confirmation Modal - requires note explaining why search is OK
+    var okConfirmModalHtml =
+        '<div class="cron-modal-overlay" id="okConfirmModalOverlay">' +
+            '<div class="cron-modal" style="max-width: 500px;">' +
+                '<div class="cron-modal-header" style="background: linear-gradient(135deg, rgba(83, 160, 81, 0.2) 0%, rgba(46, 160, 67, 0.1) 100%); border-bottom: 2px solid #53a051;">' +
+                    '<h2 style="color: #fff; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px;"><span style="font-size: 22px;">✓</span>Mark Search as OK</h2>' +
+                    '<button class="cron-modal-close" id="okConfirmModalClose">&times;</button>' +
+                '</div>' +
+                '<div class="cron-modal-body" style="padding: 24px;">' +
+                    '<div id="okConfirmModalContent">' +
+                        '<div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; margin-bottom: 20px;">' +
+                            '<div style="color: #00d4ff; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Search Name</div>' +
+                            '<div id="okConfirmSearchName" style="color: #fff; font-size: 15px; font-weight: 500; word-break: break-word;"></div>' +
+                        '</div>' +
+                        '<div style="margin-bottom: 20px;">' +
+                            '<label style="color: rgba(255,255,255,0.9); font-size: 14px; display: block; margin-bottom: 10px;">' +
+                                '<span style="color: #dc4e41;">*</span> Why is this search OK? <span style="color: rgba(255,255,255,0.5); font-size: 12px;">(Required)</span>' +
+                            '</label>' +
+                            '<textarea id="okConfirmNote" style="width: 100%; height: 100px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #fff; padding: 12px; font-size: 14px; resize: vertical;" placeholder="e.g., This search is essential for security monitoring and has been optimized to run efficiently."></textarea>' +
+                        '</div>' +
+                        '<div style="background: rgba(83, 160, 81, 0.15); border-left: 4px solid #53a051; border-radius: 0 8px 8px 0; padding: 12px; color: rgba(255,255,255,0.8); font-size: 13px;">' +
+                            '<strong>What happens:</strong> This search will be whitelisted and will no longer appear as suspicious. The admin who approved it and the reason will be recorded.' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="cron-modal-footer" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1);">' +
+                    '<button class="btn btn-secondary" id="okConfirmModalCancel">Cancel</button>' +
+                    '<button class="btn" style="background: linear-gradient(135deg, #53a051 0%, #2ea043 100%); border: none; color: white; font-weight: 500;" id="okConfirmModalSave">✓ Mark as OK</button>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -1794,6 +1835,9 @@ require([
         if (!$('#reasonModalOverlay').length) {
             $('body').append(reasonModalHtml);
         }
+        if (!$('#okConfirmModalOverlay').length) {
+            $('body').append(okConfirmModalHtml);
+        }
         if (!$('#searchPreviewModalOverlay').length) {
             $('body').append(searchPreviewModalHtml);
         }
@@ -1815,6 +1859,84 @@ require([
                 $('#reasonModalOverlay').removeClass('active');
             }
         });
+
+        // OK Confirm modal events and data
+        var currentOkSearch = { name: '', owner: '', app: '' };
+
+        $(document).on('click', '#okConfirmModalClose, #okConfirmModalCancel', function() {
+            $('#okConfirmModalOverlay').removeClass('active');
+            currentOkSearch = { name: '', owner: '', app: '' };
+        });
+
+        $(document).on('click', '#okConfirmModalOverlay', function(e) {
+            if (e.target === this) {
+                $('#okConfirmModalOverlay').removeClass('active');
+                currentOkSearch = { name: '', owner: '', app: '' };
+            }
+        });
+
+        $(document).on('click', '#okConfirmModalSave', function() {
+            var note = $('#okConfirmNote').val().trim();
+
+            if (!note) {
+                alert('Please provide a reason why this search is OK. This is required for audit purposes.');
+                $('#okConfirmNote').focus();
+                return;
+            }
+
+            if (!currentOkSearch.name) {
+                alert('No search selected.');
+                return;
+            }
+
+            // Add to ok_searches_lookup
+            var now = Math.floor(Date.now() / 1000);
+            var addQuery = '| inputlookup ok_searches_lookup ' +
+                '| append [| makeresults ' +
+                '| eval search_name="' + escapeString(currentOkSearch.name) + '"' +
+                ', search_owner="' + escapeString(currentOkSearch.owner) + '"' +
+                ', search_app="' + escapeString(currentOkSearch.app) + '"' +
+                ', approved_by="' + escapeString(currentUser) + '"' +
+                ', approved_time=' + now +
+                ', notes="' + escapeString(note) + '"]' +
+                '| dedup search_name ' +
+                '| outputlookup ok_searches_lookup';
+
+            showToast('Marking search as OK...');
+
+            runSearch(addQuery, function(err, results) {
+                if (err) {
+                    console.error('Error marking search as OK:', err);
+                    showToast('Error marking search as OK');
+                } else {
+                    logAction('approved_ok', currentOkSearch.name, 'Whitelisted: ' + note);
+                    showToast('✓ ' + currentOkSearch.name + ' marked as OK');
+
+                    // Remove from suspicious display
+                    var $row = $('.metric-popup-row').filter(function() {
+                        return $(this).find('td:eq(1)').text().trim() === currentOkSearch.name;
+                    });
+                    $row.fadeOut(300, function() { $(this).remove(); });
+
+                    // Close modal
+                    $('#okConfirmModalOverlay').removeClass('active');
+                    currentOkSearch = { name: '', owner: '', app: '' };
+
+                    // Refresh dashboard
+                    refreshDashboard();
+                }
+            });
+        });
+
+        // Function to open OK confirm modal
+        function openOkConfirmModal(searchName, owner, app) {
+            currentOkSearch = { name: searchName, owner: owner, app: app };
+            $('#okConfirmSearchName').text(searchName);
+            $('#okConfirmNote').val('');
+            $('#okConfirmModalOverlay').addClass('active');
+        }
+
+        window.openOkConfirmModal = openOkConfirmModal;
 
         // Search preview modal events
         $(document).on('click', '#searchPreviewModalClose, #searchPreviewModalCancel', function() {
@@ -1903,15 +2025,24 @@ require([
         }
         window.closeMetricPopup = closeMetricPopup;
 
-        // Metric popup row click handler - toggle selection for bulk actions
+        // Metric popup row click handler - SINGLE selection only
         $(document).on('click', '.metric-popup-row td', function(e) {
             // Don't process if clicking on status dropdown
             if ($(e.target).closest('.status-dropdown-wrapper').length > 0) {
                 return;
             }
-            // Toggle selected state on click
+
             var $row = $(this).closest('tr');
-            $row.toggleClass('selected');
+            var wasSelected = $row.hasClass('selected');
+
+            // Remove selection from ALL rows first (single select only)
+            $('.metric-popup-row').removeClass('selected');
+
+            // If this row wasn't selected, select it now
+            if (!wasSelected) {
+                $row.addClass('selected');
+            }
+            // If it was already selected, it stays deselected (toggle behavior)
 
             // Update selection count display
             var selectedCount = $('.metric-popup-row.selected').length;
@@ -1920,9 +2051,9 @@ require([
 
             if (selectedCount > 0) {
                 if ($countDisplay.length === 0) {
-                    $footer.prepend('<span class="selection-count" style="color: #00d4ff; font-weight: 600; padding: 8px 12px; background: rgba(0,212,255,0.1); border-radius: 4px; margin-right: auto;">' + selectedCount + ' selected</span>');
+                    $footer.prepend('<span class="selection-count" style="color: #00d4ff; font-weight: 600; padding: 8px 12px; background: rgba(0,212,255,0.1); border-radius: 4px; margin-right: auto;">1 selected</span>');
                 } else {
-                    $countDisplay.text(selectedCount + ' selected');
+                    $countDisplay.text('1 selected');
                 }
             } else {
                 $countDisplay.remove();
@@ -1951,16 +2082,26 @@ require([
             // Check if search is already flagged (OK/Suspicious statuses can only be flagged, others have full options)
             var isUnflagged = currentStatus && (currentStatus.toLowerCase() === 'ok' || currentStatus.toLowerCase() === 'suspicious');
 
-            // All status options available in dropdown
-            var statuses = [
-                { value: 'pending', label: 'Flag for Review', color: '#f8991d' },
-                { value: 'notified', label: 'Notified', color: '#f8be34' },
-                { value: 'review', label: 'Pending Review', color: '#6f42c1' },
-                { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
-                { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
-            ];
+            // Status options - varies based on whether this is suspicious (unflagged) or already flagged
+            var statuses;
+            if (isSuspicious) {
+                // For suspicious unflagged searches: can Flag or mark as OK
+                statuses = [
+                    { value: 'flagged', label: 'Flag for Review', color: '#f1813f' },
+                    { value: 'ok', label: 'OK (Whitelist)', color: '#53a051' }
+                ];
+            } else {
+                // For already-flagged searches: full status options
+                statuses = [
+                    { value: 'flagged', label: 'Flagged', color: '#f1813f' },
+                    { value: 'notified', label: 'Notified', color: '#f8be34' },
+                    { value: 'review', label: 'Under Review', color: '#6f42c1' },
+                    { value: 'disabled', label: 'Disabled', color: '#dc4e41' },
+                    { value: 'resolved', label: 'Resolved (Unflag)', color: '#53a051' }
+                ];
+            }
 
-            var menuHtml = '<div class="status-dropdown-menu" style="position: absolute; top: 100%; left: 0; z-index: 10000; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); min-width: 160px;">';
+            var menuHtml = '<div class="status-dropdown-menu" style="position: absolute; z-index: 10000; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); min-width: 160px; max-height: 250px; overflow-y: auto;">';
             statuses.forEach(function(s) {
                 var isSelected = currentStatus && currentStatus.toLowerCase().indexOf(s.value) > -1;
                 menuHtml += '<div class="status-option" data-status="' + s.value + '" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" data-app="' + escapeHtml(app) + '" data-is-suspicious="' + (isSuspiciousModal ? 'true' : 'false') + '" style="padding: 8px 12px; cursor: pointer; color: ' + s.color + '; border-bottom: 1px solid #333;' + (isSelected ? ' background: rgba(255,255,255,0.1);' : '') + '">' +
@@ -1969,6 +2110,24 @@ require([
             menuHtml += '</div>';
 
             $wrapper.append(menuHtml);
+
+            // Smart positioning - flip to above if not enough space below
+            var $menu = $wrapper.find('.status-dropdown-menu');
+            var wrapperOffset = $wrapper.offset();
+            var wrapperHeight = $wrapper.outerHeight();
+            var menuHeight = $menu.outerHeight();
+            var viewportHeight = $(window).height();
+            var scrollTop = $(window).scrollTop();
+            var spaceBelow = viewportHeight - (wrapperOffset.top - scrollTop + wrapperHeight);
+            var spaceAbove = wrapperOffset.top - scrollTop;
+
+            if (spaceBelow < menuHeight && spaceAbove > menuHeight) {
+                // Not enough space below, flip to above
+                $menu.css({ bottom: '100%', top: 'auto' });
+            } else {
+                // Default: show below
+                $menu.css({ top: '100%', bottom: 'auto' });
+            }
 
             // Close menu when clicking elsewhere
             $(document).one('click', function() {
@@ -2005,8 +2164,14 @@ require([
             // Close menu
             $('.status-dropdown-menu').remove();
 
+            // If "OK" selected, open confirmation modal with note requirement
+            if (newStatus === 'ok') {
+                openOkConfirmModal(searchName, owner, app);
+                return;
+            }
+
             // If trying to flag an already flagged search, show error
-            if (newStatus === 'pending' && isAlreadyFlagged) {
+            if (newStatus === 'flagged' && isAlreadyFlagged) {
                 alert('This search is already flagged.\n\nCurrent status: ' + currentStatus + '\n\nUse a different status option to change its state.');
                 return;
             }
@@ -2015,10 +2180,10 @@ require([
 
             var updateQuery;
 
-            if ((isSuspicious || isUnflagged) && newStatus === 'pending') {
+            if ((isSuspicious || isUnflagged) && newStatus === 'flagged') {
                 // For suspicious (unflagged) searches, we need to CREATE a new entry in the lookup
+                // NOTE: deadline is 0 until admin sends notification (then it gets set)
                 var now = Math.floor(Date.now() / 1000);
-                var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
                 var reason = "Suspicious pattern detected";
 
                 updateQuery = '| inputlookup flagged_searches_lookup ' +
@@ -2029,8 +2194,8 @@ require([
                     'flagged_time=' + now + ', ' +
                     'notification_sent=0, ' +
                     'notification_time=0, ' +
-                    'remediation_deadline=' + deadline + ', ' +
-                    'status="pending", ' +
+                    'remediation_deadline=0, ' +
+                    'status="flagged", ' +
                     'reason="' + escapeString(reason) + '", ' +
                     'notes="" | fields - _time] ' +
                     '| dedup search_name ' +
@@ -2566,29 +2731,29 @@ require([
 
         // Show/hide buttons based on metric type (suspicious unflagged vs flagged)
         function updateMetricTypeButtons(metricType) {
+            // Hide all action buttons first, then show relevant ones
+            $('#metricPopupFlag').hide();
+            $('#metricPopupNotify').hide();
+            $('#metricPopupUnflag').hide();
+            $('#metricPopupExtend').hide();
+            $('#metricPopupDisable').hide();
+
             if (metricType === 'suspicious') {
-                // For suspicious unflagged searches: show Flag, hide Extend/Disable/Unflag
+                // For suspicious unflagged searches: show Flag only
                 $('#metricPopupFlag').show();
-                $('#metricPopupUnflag').hide();
-                $('#metricPopupExtend').hide();
-                $('#metricPopupDisable').hide();
             } else if (metricType === 'flagged' || metricType === 'expiring') {
-                // For flagged/expiring searches: show Extend/Disable/Unflag, hide Flag
-                $('#metricPopupFlag').hide();
+                // For flagged/expiring searches: show Notify, Extend, Disable, Unflag
+                // Notify = send notification to user (starts timer)
+                // Extend = add more days to deadline (only for notified searches)
+                $('#metricPopupNotify').show();
                 $('#metricPopupUnflag').show();
                 $('#metricPopupExtend').show();
                 $('#metricPopupDisable').show();
             } else if (metricType === 'disabled') {
-                // For disabled searches: show Unflag/Enable, hide Flag/Extend/Disable
-                $('#metricPopupFlag').hide();
+                // For disabled searches: show Unflag/Enable
                 $('#metricPopupUnflag').show();
-                $('#metricPopupExtend').hide();
-                $('#metricPopupDisable').hide();
             } else {
-                // Default (total): hide Flag/Unflag, show Disable
-                $('#metricPopupFlag').hide();
-                $('#metricPopupUnflag').hide();
-                $('#metricPopupExtend').hide();
+                // Default (total): show Disable only
                 $('#metricPopupDisable').show();
             }
         }
@@ -2671,6 +2836,110 @@ require([
                         });
                         $row.fadeOut(300, function() { $(this).remove(); });
                     });
+
+                    // Refresh dashboard
+                    refreshDashboard();
+                }
+            });
+        });
+
+        // Metric popup Notify button - sends notification to user and starts timer
+        $(document).on('click', '#metricPopupNotify', function() {
+            var selectedSearches = getSelectedMetricSearches();
+            if (selectedSearches.length === 0) {
+                alert('Please select at least one search to notify.');
+                return;
+            }
+
+            // Filter to only searches with status "flagged" (not yet notified)
+            var flaggedSearches = selectedSearches.filter(function(s) {
+                var status = (s.status || '').toLowerCase();
+                return status === 'flagged' || status === 'pending';
+            });
+
+            if (flaggedSearches.length === 0) {
+                alert('No searches awaiting notification.\n\nOnly searches with status "Flagged" can be notified.\nSearches already notified will have their timer running.');
+                return;
+            }
+
+            // Build email preview message
+            var emailPreview = flaggedSearches.map(function(s) {
+                return '📧 To: ' + s.owner + '@' + CONFIG.emailDomain + '\n' +
+                       '   Subject: Action Required: Scheduled Search Flagged\n' +
+                       '   Search: "' + s.name + '"\n' +
+                       '   Reason: ' + (s.reason || 'Flagged by administrator') + '\n' +
+                       '   Days to remediate: ' + CONFIG.remediationDays;
+            }).join('\n\n');
+
+            if (!confirm('Send notification to ' + flaggedSearches.length + ' search owner(s)?\n\n' +
+                         'This will:\n' +
+                         '• Change status from "Flagged" to "Notified"\n' +
+                         '• Start the ' + CONFIG.remediationDays + '-day remediation timer\n\n' +
+                         'EMAIL PREVIEW:\n' + emailPreview)) {
+                return;
+            }
+
+            console.log('Notifying users for searches:', flaggedSearches);
+
+            // Calculate new deadline
+            var now = Math.floor(Date.now() / 1000);
+            var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
+
+            // Build update query - change status to "notified" and set deadline
+            var searchNamesList = flaggedSearches.map(function(s) { return '"' + escapeString(s.name) + '"'; }).join(', ');
+
+            var updateQuery = '| inputlookup flagged_searches_lookup ' +
+                '| eval status = if(search_name IN (' + searchNamesList + ') AND (status="flagged" OR status="pending"), "notified", status) ' +
+                '| eval remediation_deadline = if(search_name IN (' + searchNamesList + ') AND (status="notified"), ' + deadline + ', remediation_deadline) ' +
+                '| eval notification_sent = if(search_name IN (' + searchNamesList + '), 1, notification_sent) ' +
+                '| eval notification_time = if(search_name IN (' + searchNamesList + ') AND notification_time=0, ' + now + ', notification_time) ' +
+                '| outputlookup flagged_searches_lookup';
+
+            showToast('Notifying ' + flaggedSearches.length + ' user(s)...');
+
+            runSearch(updateQuery, function(err, results) {
+                if (err) {
+                    console.error('Error notifying users:', err);
+                    showToast('Error sending notifications');
+                } else {
+                    // Log actions
+                    flaggedSearches.forEach(function(s) {
+                        logAction('notified', s.name, 'User notification sent, timer started');
+                    });
+
+                    // Show success toast with email simulation
+                    showToast('✓ Notified ' + flaggedSearches.length + ' user(s) - Timer started (' + CONFIG.remediationDays + ' days)');
+
+                    // Update UI - change status badge and show countdown
+                    flaggedSearches.forEach(function(s) {
+                        var $row = $('.metric-popup-row').filter(function() {
+                            return $(this).find('td:eq(1)').text().trim() === s.name;
+                        });
+
+                        if ($row.length) {
+                            // Update status badge
+                            var $statusCell = $row.find('.status-cell');
+                            var newBadgeHtml = '<div class="status-dropdown-wrapper" data-search="' + escapeHtml(s.name) + '" data-owner="' + escapeHtml(s.owner) + '" data-app="' + escapeHtml(s.app) + '" data-current-status="notified" style="cursor: pointer; position: relative;" title="Click to change status">' +
+                                '<span class="status-badge notified" style="background: #f8be34; color: #000; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">NOTIFIED</span>' +
+                                '<span style="margin-left: 4px; font-size: 10px; opacity: 0.7;">▼</span>' +
+                                '</div>';
+                            $statusCell.html(newBadgeHtml);
+
+                            // Update countdown cell
+                            var $countdownCell = $row.find('.countdown-cell');
+                            if ($countdownCell.length) {
+                                $countdownCell.attr('data-deadline', deadline);
+                                $countdownCell.html(formatCountdownTimer(deadline, 'notified'));
+                            }
+
+                            // Update row data
+                            $row.attr('data-current-status', 'notified');
+                            $row.removeClass('selected');
+                        }
+                    });
+
+                    // Restart countdown timer to pick up new deadlines
+                    startCountdownTimer();
 
                     // Refresh dashboard
                     refreshDashboard();
@@ -4041,9 +4310,11 @@ require([
             var colCount = (metricType === 'flagged' || metricType === 'expiring') ? 7 : 6;
             var funnyMessage = getZeroItemMessage();
             if (metricType === 'flagged' || metricType === 'expiring') {
-                $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+                $('#metricPopupTableHead').html('<tr><th>#</th><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Reason</th></tr>');
+            } else if (metricType === 'suspicious') {
+                $('#metricPopupTableHead').html('<tr><th>#</th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th style="min-width: 200px;">⚠️ Why Suspicious</th></tr>');
             } else {
-                $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+                $('#metricPopupTableHead').html('<tr><th>#</th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
             }
             $('#metricPopupTableBody').html('<tr><td colspan="' + colCount + '" style="text-align: center; color: #5cc05c; padding: 30px; font-size: 14px;"><div style="font-size: 36px; margin-bottom: 10px;">🎉</div>' + funnyMessage + '</td></tr>');
             $('#metricPopupOverlay').addClass('active');
@@ -4052,13 +4323,17 @@ require([
             return; // Skip the search since there's nothing to load
         }
 
-        // Add "Time Remaining" column for flagged/expiring metrics
+        // Add "Time Remaining" column for flagged/expiring metrics ONLY (not suspicious)
         if (metricType === 'flagged' || metricType === 'expiring') {
-            $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableHead').html('<tr><th>#</th><th>Search Name</th><th>Status</th><th>⏱ Time Remaining</th><th>Owner</th><th>App</th><th>Reason</th></tr>');
+            $('#metricPopupTableBody').html('<tr><td colspan="7" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+        } else if (metricType === 'suspicious') {
+            // Suspicious searches show detailed reason - NO days remaining column
+            $('#metricPopupTableHead').html('<tr><th>#</th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th style="min-width: 200px;">⚠️ Why Suspicious</th></tr>');
             $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
         } else {
-            $('#metricPopupTableHead').html('<tr><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
-            $('#metricPopupTableBody').html('<tr><td colspan="5" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
+            $('#metricPopupTableHead').html('<tr><th>#</th><th>Search Name</th><th>Status</th><th>Owner</th><th>App</th><th>Details</th></tr>');
+            $('#metricPopupTableBody').html('<tr><td colspan="6" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Loading...</td></tr>');
         }
         $('#metricPopupOverlay').addClass('active');
 
@@ -4078,10 +4353,11 @@ require([
                 searchQuery = '| inputlookup governance_search_cache.csv | where disabled="0" OR disabled=0 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | eval status_display=if(isnotnull(flag_status), flag_status, "active") | table title, owner, app, status_display, frequency_label | head 50';
                 break;
             case 'suspicious':
-                searchQuery = '| inputlookup governance_search_cache.csv | where (disabled="0" OR disabled=0) AND is_suspicious=1 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | where isnull(flag_status) OR flag_status="" | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason | head 50';
+                // Exclude both flagged searches AND searches marked as OK (whitelisted)
+                searchQuery = '| inputlookup governance_search_cache.csv | where (disabled="0" OR disabled=0) AND is_suspicious=1 | lookup flagged_searches_lookup search_name as title OUTPUT status as flag_status | lookup ok_searches_lookup search_name as title OUTPUT approved_time as ok_approved | where (isnull(flag_status) OR flag_status="") AND isnull(ok_approved) | eval status_display="suspicious" | table title, owner, app, status_display, suspicious_reason | head 50';
                 break;
             case 'flagged':
-                searchQuery = '| inputlookup flagged_searches_lookup | search status IN ("pending", "notified", "disabled", "review") | dedup search_name | eval status_display=status | eval deadline_epoch=remediation_deadline | eval days_remaining=round((remediation_deadline - now()) / 86400, 2) | table search_name, search_owner, search_app, status_display, reason, status, deadline_epoch, days_remaining | head 50';
+                searchQuery = '| inputlookup flagged_searches_lookup | search status IN ("flagged", "pending", "notified", "disabled", "review") | dedup search_name | eval status_display=status | eval deadline_epoch=remediation_deadline | eval days_remaining=round((remediation_deadline - now()) / 86400, 2) | table search_name, search_owner, search_app, status_display, reason, status, deadline_epoch, days_remaining | head 50';
                 break;
             case 'expiring':
                 searchQuery = '| inputlookup flagged_searches_lookup | search status="pending" OR status="notified" | dedup search_name | eval days_remaining = round((remediation_deadline - now()) / 86400, 1) | where days_remaining >= 0 AND days_remaining <= 3 | eval status_display="expiring" | table search_name, search_owner, search_app, status_display, days_remaining, reason | head 50';
@@ -4159,9 +4435,17 @@ require([
                         }
 
                         html += '<td style="padding: 8px;">' + escapeHtml(owner) + '</td>' +
-                            '<td style="padding: 8px;">' + escapeHtml(app) + '</td>' +
-                            '<td style="padding: 8px; color: rgba(255,255,255,0.6);">' + escapeHtml(detail || '-') + '</td>' +
-                            '</tr>';
+                            '<td style="padding: 8px;">' + escapeHtml(app) + '</td>';
+
+                        // For suspicious searches, show the reason prominently with highlighting
+                        if (metricType === 'suspicious' && detail && detail !== '-') {
+                            html += '<td style="padding: 8px; background: rgba(248, 190, 52, 0.15); border-left: 3px solid #f8be34; color: #f8be34; font-weight: 500;">' +
+                                '<span title="' + escapeHtml(detail) + '">' + escapeHtml(detail) + '</span></td>';
+                        } else {
+                            html += '<td style="padding: 8px; color: rgba(255,255,255,0.6);">' + escapeHtml(detail || '-') + '</td>';
+                        }
+
+                        html += '</tr>';
                     }
                     $('#metricPopupTableBody').html(html);
 
