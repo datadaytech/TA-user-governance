@@ -517,6 +517,7 @@ require([
 
             // Re-enhance tables after Splunk re-renders them
             // Multiple calls at staggered intervals to catch async rendering
+            setTimeout(enhanceScheduleColumns, 500);
             setTimeout(enhanceScheduleColumns, 1000);
             setTimeout(enhanceScheduleColumns, 2000);
             setTimeout(enhanceScheduleColumns, 3000);
@@ -524,18 +525,22 @@ require([
 
             // Re-setup metric panel click handlers after refresh
             // Panels may have been recreated with fresh DOM elements
+            // Run multiple times with increasing delays to catch async rendering
             setTimeout(function() {
                 // Clear existing setup markers so handlers are re-attached
                 $('.dashboard-element.single, .dashboard-row .dashboard-cell, .dashboard-panel').removeAttr('data-metric-setup');
                 setupMetricPanelClickHandlers();
+            }, 500);
+            setTimeout(function() {
+                setupMetricPanelClickHandlers();
             }, 1500);
             setTimeout(function() {
                 setupMetricPanelClickHandlers();
-            }, 3000);
+            }, 2500);
             setTimeout(function() {
                 setupMetricPanelClickHandlers();
-            }, 5000);
-        }, 500);
+            }, 4000);
+        }, 300);
     }
 
     // Expose refreshDashboard globally for external access (e.g., tests, integrations)
@@ -564,7 +569,10 @@ require([
         var now = Math.floor(Date.now() / 1000);
         var deadline = now + (CONFIG.remediationDays * 24 * 60 * 60);
 
-        var searchQuery = '| makeresults ' +
+        // Build query that removes existing entry first, then adds new one (prevents duplicates)
+        var searchQuery = '| inputlookup flagged_searches_lookup ' +
+            '| search search_name!="' + escapeString(searchName) + '" ' +
+            '| append [| makeresults ' +
             '| eval search_name="' + escapeString(searchName) + '"' +
             ', search_owner="' + escapeString(owner) + '"' +
             ', search_app="' + escapeString(app) + '"' +
@@ -575,32 +583,44 @@ require([
             ', remediation_deadline=' + deadline +
             ', status="pending"' +
             ', reason="' + escapeString(reason) + '"' +
-            ', notes=""' +
+            ', notes=""]' +
             '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes' +
-            '| outputlookup append=true flagged_searches_lookup';
+            '| outputlookup flagged_searches_lookup';
 
         console.log("Running flag search query...");
 
         // Show immediate visual feedback
         showToast("Flagging " + searchName + "...");
 
+        // Find the row - data-search is on the checkbox, not the TR
+        var $checkbox = $('.gov-checkbox[data-search="' + searchName + '"]');
+        var $row = $checkbox.closest('tr');
+
         // Mark the row as flagged visually
-        $('[data-search="' + searchName + '"]').addClass('row-flagged');
+        $row.addClass('row-flagged');
+        $checkbox.attr('data-flagged', 'true');
 
         runSearch(searchQuery, function(err, results) {
             console.log("Flag search callback:", err, results);
             if (err) {
                 console.error("Error flagging search:", err);
                 showToast("Error: " + err);
-                $('[data-search="' + searchName + '"]').removeClass('row-flagged');
+                $row.removeClass('row-flagged');
+                $checkbox.attr('data-flagged', 'false');
             } else {
                 console.log("Search flagged successfully");
                 logAction("flagged", searchName, reason);
                 showToast("✓ Flagged: " + searchName);
 
-                var $row = $('[data-search="' + searchName + '"]');
+                // Add permanent flag indicator to the row
+                var $firstTd = $row.find('td').first();
+                if ($firstTd.length && !$firstTd.find('.flag-indicator').length) {
+                    $firstTd.css('position', 'relative').prepend(
+                        '<span class="flag-indicator" style="color: #dc4e41; margin-right: 5px;" title="Flagged for review">⚑</span>'
+                    );
+                }
 
-                // Add success checkmark
+                // Add success checkmark animation
                 if (!$row.find('.flag-success-indicator').length) {
                     $row.css('position', 'relative').append('<span class="flag-success-indicator">✓</span>');
                     setTimeout(function() {
@@ -705,9 +725,15 @@ require([
                 ', notes=""';
         });
 
-        var searchQuery = unionParts.join(' ') +
-            '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes' +
-            '| outputlookup append=true flagged_searches_lookup';
+        // Build list of search names for exclusion
+        var searchNamesList = searches.map(function(s) { return '"' + escapeString(s.searchName) + '"'; }).join(', ');
+
+        // First read existing entries (excluding ones we're flagging), then union with new entries
+        var searchQuery = '| inputlookup flagged_searches_lookup ' +
+            '| search NOT search_name IN (' + searchNamesList + ') ' +
+            '| append [' + unionParts.join(' ') +
+            '| table search_name, search_owner, search_app, flagged_by, flagged_time, notification_sent, notification_time, remediation_deadline, status, reason, notes]' +
+            '| outputlookup flagged_searches_lookup';
 
         console.log("Batch flag query for " + searches.length + " searches");
 
@@ -727,40 +753,47 @@ require([
 
                 // Update UI for each flagged row
                 searches.forEach(function(s) {
-                    var $row = $('tr[data-search="' + s.searchName + '"]');
-                    $row.addClass('row-flagged').attr('data-flagged', 'true');
+                    // Find the row via the checkbox (data-search is on checkbox, not TR)
+                    var $checkbox = $('.gov-checkbox[data-search="' + s.searchName + '"]');
+                    var $row = $checkbox.closest('tr');
 
-                    // Update checkbox data
-                    $row.find('.gov-checkbox').attr('data-flagged', 'true');
+                    if ($row.length) {
+                        $row.addClass('row-flagged').attr('data-flagged', 'true');
 
-                    // Add flag indicator to the Search Name column (first non-checkbox, non-row-number cell)
-                    // Skip checkbox cell and row number cell, then get the first content cell
-                    var $cells = $row.find('td');
-                    var $searchCell = null;
-                    $cells.each(function(idx) {
-                        var $cell = $(this);
-                        // Skip checkbox cell
-                        if ($cell.hasClass('gov-checkbox-cell')) return true;
-                        // Skip row number cell (just a number)
-                        if ($cell.text().trim().match(/^\d+$/)) return true;
-                        // This should be the search name column - verify it contains the search name
-                        var cellText = $cell.text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓]+/, '').trim();
-                        if (cellText === s.searchName || cellText.indexOf(s.searchName) > -1) {
-                            $searchCell = $cell;
-                            return false; // break
+                        // Update checkbox data
+                        $checkbox.attr('data-flagged', 'true');
+
+                        // Add flag indicator to the Search Name column (first non-checkbox, non-row-number cell)
+                        // Skip checkbox cell and row number cell, then get the first content cell
+                        var $cells = $row.find('td');
+                        var $searchCell = null;
+                        $cells.each(function(idx) {
+                            var $cell = $(this);
+                            // Skip checkbox cell
+                            if ($cell.hasClass('gov-checkbox-cell')) return true;
+                            // Skip row number cell (just a number)
+                            if ($cell.text().trim().match(/^\d+$/)) return true;
+                            // This should be the search name column - verify it contains the search name
+                            var cellText = $cell.text().trim().replace(/^[\s⚑⚐🚩⚠️🚫✓]+/, '').trim();
+                            if (cellText === s.searchName || cellText.indexOf(s.searchName) > -1) {
+                                $searchCell = $cell;
+                                return false; // break
+                            }
+                        });
+
+                        if ($searchCell && $searchCell.length && !$searchCell.find('.flag-indicator').length) {
+                            $searchCell.prepend('<span class="flag-indicator" style="color: #dc4e41; margin-right: 6px; font-size: 12px;" title="Flagged for review">🚩</span>');
                         }
-                    });
 
-                    if ($searchCell && $searchCell.length && !$searchCell.find('.flag-indicator').length) {
-                        $searchCell.prepend('<span class="flag-indicator" style="color: #dc4e41; margin-right: 6px; font-size: 12px;" title="Flagged for review">🚩</span>');
+                        // Update Flagged column if present
+                        $row.find('td').each(function() {
+                            if ($(this).text().trim() === 'No') {
+                                $(this).html('<span style="color: #dc4e41; font-weight: 600;">Yes</span>');
+                            }
+                        });
+                    } else {
+                        console.log("Could not find row for search:", s.searchName);
                     }
-
-                    // Update Flagged column if present
-                    $row.find('td').each(function() {
-                        if ($(this).text().trim() === 'No') {
-                            $(this).html('<span style="color: #dc4e41; font-weight: 600;">Yes</span>');
-                        }
-                    });
                 });
 
                 // Clear selections
@@ -2877,11 +2910,19 @@ require([
             window.disableNow();
         });
 
-        // Escape key
+        // Escape key - close ALL modals
         $(document).on('keydown', function(e) {
             if (e.key === 'Escape' || e.keyCode === 27) {
                 $('#cronModalOverlay').removeClass('active');
                 $('#impactModalOverlay').removeClass('active');
+                $('#flaggedModalOverlay').removeClass('active');
+                $('#extendModalOverlay').removeClass('active');
+                // Use the closeMetricPopup function for metric popup
+                if (typeof window.closeMetricPopup === 'function') {
+                    window.closeMetricPopup();
+                } else {
+                    $('#metricPopupOverlay').removeClass('active');
+                }
             }
         });
     }
@@ -3653,8 +3694,9 @@ require([
                 var $cells = $row.find('td');
 
                 if ($cells.length < 2) return;
-                if ($row.hasClass('gov-enhanced')) return;
-                $row.addClass('gov-enhanced');
+
+                // Track if this is a fresh row or being re-enhanced
+                var isNewRow = !$row.hasClass('gov-enhanced');
 
                 // Check for row number column
                 var hasRowNum = $cells.eq(0).text().trim().match(/^\d+$/);
@@ -3693,7 +3735,7 @@ require([
 
                 if (!searchName) return;
 
-                // Store data on row
+                // Store data on row (always update in case data changed)
                 $row.attr('data-search', searchName)
                     .attr('data-owner', owner)
                     .attr('data-app', app)
@@ -3702,28 +3744,36 @@ require([
 
                 if (isFlagged) {
                     $row.addClass('row-flagged');
+                } else {
+                    $row.removeClass('row-flagged');
                 }
 
-                // Add checkbox cell (skip for cost-only panels)
-                if (!skipCheckboxes && !$row.find('.gov-checkbox').length) {
-                    var checkboxCell = '<td class="gov-checkbox-cell" style="width: 40px !important; text-align: center !important; padding: 8px !important; vertical-align: middle !important;">' +
-                        '<input type="checkbox" class="gov-checkbox" ' +
-                        'data-search="' + escapeHtml(searchName) + '" ' +
-                        'data-owner="' + escapeHtml(owner) + '" ' +
-                        'data-app="' + escapeHtml(app) + '" ' +
-                        'data-reason="' + escapeHtml(reason) + '" ' +
-                        'data-flagged="' + isFlagged + '" ' +
-                        'style="width: 18px; height: 18px; cursor: pointer; margin: 0;">' +
-                        '</td>';
+                // Mark as enhanced (for checkbox - only add once)
+                if (isNewRow) {
+                    $row.addClass('gov-enhanced');
 
-                    if (hasRowNum) {
-                        $cells.eq(0).after(checkboxCell);
-                    } else {
-                        $row.prepend(checkboxCell);
+                    // Add checkbox cell (skip for cost-only panels) - only on first pass
+                    if (!skipCheckboxes && !$row.find('.gov-checkbox').length) {
+                        var checkboxCell = '<td class="gov-checkbox-cell" style="width: 40px !important; text-align: center !important; padding: 8px !important; vertical-align: middle !important;">' +
+                            '<input type="checkbox" class="gov-checkbox" ' +
+                            'data-search="' + escapeHtml(searchName) + '" ' +
+                            'data-owner="' + escapeHtml(owner) + '" ' +
+                            'data-app="' + escapeHtml(app) + '" ' +
+                            'data-reason="' + escapeHtml(reason) + '" ' +
+                            'data-flagged="' + isFlagged + '" ' +
+                            'style="width: 18px; height: 18px; cursor: pointer; margin: 0;">' +
+                            '</td>';
+
+                        if (hasRowNum) {
+                            $cells.eq(0).after(checkboxCell);
+                        } else {
+                            $row.prepend(checkboxCell);
+                        }
                     }
                 }
 
                 // Add flag icon ONLY on Search Name column, ONLY if flagged (red flag), NO yellow flags
+                // This runs on every pass to ensure flag indicator persists after refresh
                 if (!isFlaggedPanel && isFlagged && searchName) {
                     // Find the cell containing the search name by matching content (more reliable than index)
                     // Use same emoji regex as line 3318 to match all possible status icons
@@ -3744,10 +3794,12 @@ require([
                 }
 
                 // Enhance schedule column with cron clickable
+                // ALWAYS check this - Splunk may replace cell content on refresh
                 if (scheduleColIndex >= 0 && $cells.length > scheduleColIndex) {
                     var $scheduleCell = $cells.eq(scheduleColIndex);
                     var cronValue = $scheduleCell.text().trim();
 
+                    // If cron-clickable is missing but should exist, re-add it
                     if (!$scheduleCell.find('.cron-clickable').length && cronValue.match(/^[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+\s+[\d\*\/\-\,]+$/)) {
                         $scheduleCell.html('<span class="cron-clickable" data-cron="' + escapeHtml(cronValue) + '" data-search="' + escapeHtml(searchName) + '" data-owner="' + escapeHtml(owner) + '" data-app="' + escapeHtml(app) + '">' + escapeHtml(cronValue) + '</span>');
                     }
