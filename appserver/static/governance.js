@@ -3593,28 +3593,77 @@ require([
         });
     }
 
-    // Format SPL query with pipe formatting (simplified to avoid cascading issues)
+    // Format SPL query with safe syntax highlighting using placeholder approach
     function formatSplunkQuery(query) {
         if (!query) return '';
 
         // First escape HTML to prevent XSS
-        var escaped = escapeHtml(query);
+        var text = escapeHtml(query);
 
-        // Split by pipe character and format each command on a new line
-        // Only colorize the pipe character to avoid cascading regex issues
-        var parts = escaped.split(/\s*\|\s*/);
-        var formattedLines = [];
+        // Use unique placeholders that won't appear in SPL to avoid cascading regex issues
+        var placeholders = [];
+        var phIndex = 0;
 
-        parts.forEach(function(part, idx) {
-            if (idx === 0 && part.trim()) {
-                formattedLines.push(part);
-            } else if (part.trim()) {
-                // Only highlight the pipe, leave the rest as plain text
-                formattedLines.push('<span style="color: #00d4ff; font-weight: bold;">|</span> ' + part);
-            }
+        function addPlaceholder(content, style) {
+            var ph = '\uE000' + phIndex + '\uE001';
+            placeholders.push({ ph: ph, content: content, style: style });
+            phIndex++;
+            return ph;
+        }
+
+        // Step 1: Protect quoted strings first
+        text = text.replace(/"([^"]+)"/g, function(match, p1) {
+            return addPlaceholder('"' + p1 + '"', 'color: #a5d6ff');
         });
 
-        return formattedLines.join('\n');
+        // Step 2: Format pipes with newlines
+        text = text.replace(/\s*\|\s*/g, function() {
+            return '\n' + addPlaceholder('|', 'color: #00d4ff; font-weight: bold') + ' ';
+        });
+
+        // Step 3: Highlight commands (first word after pipe or at start)
+        var lines = text.split('\n');
+        var formattedLines = lines.map(function(line) {
+            if (!line.trim()) return line;
+            // First word after pipe placeholder is a command
+            if (line.indexOf('\uE000') === 0) {
+                return line.replace(/(\uE000\d+\uE001 )(\w+)/, function(match, ph, cmd) {
+                    return ph + addPlaceholder(cmd, 'color: #ff7b72; font-weight: 600');
+                });
+            } else {
+                // First line without pipe - highlight first word as command
+                return line.replace(/^(\w+)/, function(match) {
+                    return addPlaceholder(match, 'color: #ff7b72; font-weight: 600');
+                });
+            }
+        });
+        text = formattedLines.join('\n');
+
+        // Step 4: Highlight field=value pairs (but not inside placeholders)
+        text = text.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*=)/g, function(match, field) {
+            // Skip if already a placeholder
+            if (match.indexOf('\uE000') >= 0) return match;
+            return addPlaceholder(field, 'color: #f8be34');
+        });
+
+        // Step 5: Highlight keywords
+        var keywords = ['BY', 'AS', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'OUTPUT', 'OUTPUTNEW', 'FROM', 'INTO'];
+        keywords.forEach(function(kw) {
+            var regex = new RegExp('\\b(' + kw + ')\\b', 'gi');
+            text = text.replace(regex, function(match) {
+                return addPlaceholder(match, 'color: #ff7b72');
+            });
+        });
+
+        // Step 6: Replace all placeholders with actual HTML spans
+        placeholders.forEach(function(p) {
+            text = text.replace(p.ph, '<span style="' + p.style + '">' + p.content + '</span>');
+        });
+
+        // Clean up any leading newline
+        text = text.replace(/^\n/, '');
+
+        return text;
     }
 
     function openCronModal(searchName, cronSchedule, owner, app) {
@@ -4374,8 +4423,18 @@ require([
                 // Add disabled indicator next to search name if search is disabled
                 var isDisabled = false;
                 if (statusColIndex >= 0 && $cells.length > statusColIndex) {
-                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
-                    isDisabled = (statusText === 'disabled' || statusText.indexOf('disabled') > -1);
+                    var $statusCell = $cells.eq(statusColIndex);
+                    // Get status from the dropdown wrapper data attribute (more reliable)
+                    var $wrapper = $statusCell.find('.status-dropdown-wrapper');
+                    var statusText;
+                    if ($wrapper.length) {
+                        statusText = ($wrapper.data('current-status') || '').toLowerCase();
+                    } else {
+                        // Fallback to badge text only (not entire cell to avoid dropdown menu text)
+                        var $badge = $statusCell.find('.status-badge');
+                        statusText = ($badge.length ? $badge.text() : $statusCell.text()).trim().toLowerCase();
+                    }
+                    isDisabled = (statusText === 'disabled' || statusText === 'auto-disabled');
                 }
 
                 if (isDisabled && searchName) {
@@ -4398,8 +4457,18 @@ require([
                 // Add blue lightning bolt for suspicious (unflagged) searches
                 var isSuspicious = false;
                 if (statusColIndex >= 0 && $cells.length > statusColIndex) {
-                    var statusText = $cells.eq(statusColIndex).text().trim().toLowerCase();
-                    isSuspicious = (statusText === 'suspicious');
+                    var $statusCell = $cells.eq(statusColIndex);
+                    // Get status from the dropdown wrapper data attribute (more reliable)
+                    var $wrapper = $statusCell.find('.status-dropdown-wrapper');
+                    var suspStatusText;
+                    if ($wrapper.length) {
+                        suspStatusText = ($wrapper.data('current-status') || '').toLowerCase();
+                    } else {
+                        // Fallback to badge text only (not entire cell to avoid dropdown menu text)
+                        var $badge = $statusCell.find('.status-badge');
+                        suspStatusText = ($badge.length ? $badge.text() : $statusCell.text()).trim().toLowerCase();
+                    }
+                    isSuspicious = (suspStatusText === 'suspicious');
                 }
 
                 if (isSuspicious && !isFlagged && searchName) {
