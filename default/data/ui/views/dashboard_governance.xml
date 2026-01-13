@@ -29,8 +29,8 @@
 
   <!-- Summary Metrics Row -->
   <row>
-    <panel>
-      <single>
+    <panel id="total_dashboards_panel">
+      <single id="total_dashboards_metric">
         <title>Total Dashboards</title>
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
@@ -40,13 +40,18 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="dashboard_popup_type">total</set>
+          <set token="dashboard_popup_value">$click.value$</set>
+          <set token="dashboard_popup_title">Total Dashboards</set>
+        </drilldown>
       </single>
     </panel>
-    <panel>
-      <single>
+    <panel id="complex_dashboards_panel">
+      <single id="complex_dashboards_metric">
         <title>Complex Dashboards</title>
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
@@ -58,14 +63,19 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[5,15]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="dashboard_popup_type">complex</set>
+          <set token="dashboard_popup_value">$click.value$</set>
+          <set token="dashboard_popup_title">Complex Dashboards</set>
+        </drilldown>
       </single>
     </panel>
-    <panel>
-      <single>
+    <panel id="private_dashboards_panel">
+      <single id="private_dashboards_metric">
         <title>Private Dashboards</title>
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
@@ -77,14 +87,19 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
         <option name="rangeValues">[10,30]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="dashboard_popup_type">private</set>
+          <set token="dashboard_popup_value">$click.value$</set>
+          <set token="dashboard_popup_title">Private Dashboards</set>
+        </drilldown>
       </single>
     </panel>
-    <panel>
-      <single>
+    <panel id="app_dashboards_panel">
+      <single id="app_dashboards_metric">
         <title>App Dashboards</title>
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
@@ -96,13 +111,18 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="dashboard_popup_type">app</set>
+          <set token="dashboard_popup_value">$click.value$</set>
+          <set token="dashboard_popup_title">App Dashboards</set>
+        </drilldown>
       </single>
     </panel>
-    <panel>
-      <single>
+    <panel id="global_dashboards_panel">
+      <single id="global_dashboards_metric">
         <title>Global Dashboards</title>
         <search>
           <query>| rest /servicesNS/-/-/data/ui/views splunk_server=local
@@ -114,9 +134,14 @@
           <latest>now</latest>
         </search>
         <option name="colorBy">value</option>
-        <option name="drilldown">none</option>
+        <option name="drilldown">all</option>
         <option name="rangeColors">["0x53a051","0x006d9c"]</option>
         <option name="useColors">1</option>
+        <drilldown>
+          <set token="dashboard_popup_type">global</set>
+          <set token="dashboard_popup_value">$click.value$</set>
+          <set token="dashboard_popup_title">Global Dashboards</set>
+        </drilldown>
       </single>
     </panel>
   </row>
